@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Listening | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<script src="tap.js"></script>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"><div class="empty">Loading…</div></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, p = new URLSearchParams(location.search), L = S.params().level, main = document.getElementById('main');
+  var I = parseInt(p.get('i'), 10);
+  S.mount(L, L, 'listen');
+  // how the JLPT names each part, what it tests, and whether the options are printed or only spoken
+  var TYPES = {
+    task: { jp: '課題理解', en: 'Task-based comprehension', how: 'Listen for what someone has to do next — and in what order.', printed: true },
+    point: { jp: 'ポイント理解', en: 'Point comprehension', how: 'You hear the question first: listen for that one reason or detail.', printed: true },
+    gist: { jp: '概要理解', en: 'Summary comprehension', how: 'Catch the speaker’s main point or attitude. The question and options come only as audio.', printed: false },
+    utterance: { jp: '発話表現', en: 'Verbal expressions', how: 'Read the situation, then pick what you would say. Options are audio only.', printed: false, showIntro: true },
+    response: { jp: '即時応答', en: 'Quick response', how: 'One short remark, then three replies. Pick the natural one. Audio only.', printed: false },
+    integrated: { jp: '統合理解', en: 'Integrated comprehension', how: 'Several options are explained, then discussed. Keep track of who prefers what.', printed: true }
+  };
+  var ORDER = ['task', 'point', 'gist', 'utterance', 'response', 'integrated'];
+  var RATE = S.LISTEN_RATE[L];                               // fixed per level; the speed setting doesn't apply here
+  var SP = { M: '男', F: '女', N: '—' };
+
+  S.load(L, 'listen', function (items) {
+    if (!items || !items.length) { main.innerHTML = '<div class="panel empty" style="margin-top:40px">' + L.toUpperCase() + ' listening is coming soon.</div>'; return; }
+    document.title = L.toUpperCase() + ' Listening | Nozomi';
+    if (I >= 1 && I <= items.length) player(items, I - 1); else list(items);
+  });
+
+  function mark(id) {
+    var st = S.lrState(id);
+    return st ? (st.ok ? '<span class="lr-mark ok" title="Answered correctly">✓</span>' : '<span class="lr-mark no" title="Last answer was wrong">✗</span>') : '<span class="lr-mark new">New</span>';
+  }
+  function list(items) {
+    var done = items.filter(function (x) { return S.lrState(x.id); }).length, right = items.filter(function (x) { var s = S.lrState(x.id); return s && s.ok; }).length;
+    var first = items.findIndex(function (x) { return !S.lrState(x.id); });
+    main.innerHTML = '<section class="page-head"><div class="deck-ic d-listen" style="width:64px;height:64px;border-radius:16px">' + S.icon(S.SECTIONS.listen.icon) + '</div>' +
+      '<div style="flex:1;min-width:220px"><h1>' + L.toUpperCase() + ' Listening <span class="jp muted" style="font-size:1.3rem">聴解</span></h1>' +
+      '<p>' + items.length + ' exam-style questions · ' + done + ' tried · ' + right + ' correct. Use headphones, and try first without the text.</p></div>' +
+      '<a class="btn btn-primary" href="listening.html?l=' + L + '&i=' + ((first < 0 ? 0 : first) + 1) + '">' + (first < 0 ? 'Go again from 1' : done ? 'Continue · No. ' + (first + 1) : 'Start') + ' ' + S.icon(S.ICONS.arrow) + '</a></section>' +
+      ORDER.filter(function (t) { return items.some(function (x) { return x.type === t; }); }).map(function (t) {
+        var T = TYPES[t];
+        return '<h2 class="section-title">' + T.jp + ' <small>' + T.en + ' — ' + T.how + '</small></h2><div class="lr-list">' +
+          items.map(function (x, i) {
+            if (x.type !== t) return '';
+            return '<a class="panel lr-row" href="listening.html?l=' + L + '&i=' + (i + 1) + '"><span class="lr-no">' + (i + 1) + '</span><span class="lr-title">' + S.esc(x.title) + '</span>' + mark(x.id) + '</a>';
+          }).join('') + '</div>';
+      }).join('') + voiceNote();
+  }
+  function voiceNote() {
+    return '<p class="muted lr-note">Recorded with VOICEVOX — a different voice for the man, the woman and the narrator. ' +
+      'For the real thing, also listen to the official sample tests at jlpt.jp.</p>';
+  }
+
+  function player(items, idx) {
+    var x = items[idx], T = TYPES[x.type], answered = false, showText = S.setting('lrText') === true, showEn = false;
+    // what the speaker reads: the narrator's intro, the dialogue, the question, then (for audio-only options) the options
+    function script() {
+      var parts = [];
+      if (x.intro) parts.push({ t: S.plain(x.intro), sp: 'N', k: 'intro' });
+      x.lines.forEach(function (ln, i) { parts.push({ t: S.plain(ln.ja), sp: ln.sp, k: 'l' + i }); });
+      if (x.question) parts.push({ t: S.plain(x.question), sp: 'N', k: 'q' });
+      if (!T.printed) x.options.forEach(function (o, i) { parts.push({ t: (i + 1) + '、' + S.plain(o), sp: 'N', k: 'o' + i }); });
+      return parts;
+    }
+    function lineHtml(ln, i) {
+      return '<div class="ls-line" data-k="l' + i + '"><span class="ls-sp sp-' + ln.sp + '">' + SP[ln.sp] + '</span><div><div class="ja tap">' + S.ruby(ln.ja) + '</div>' +
+        (showEn ? '<div class="en">' + S.esc(ln.en) + '</div>' : '') + '</div></div>';
+    }
+    function draw() {
+      var opts = x.options.map(function (o, i) {
+        var txt = T.printed || answered ? S.ruby(o) : '<span class="muted">（listen）</span>';
+        return '<button class="opt jp" type="button" data-i="' + i + '"' + (answered ? ' disabled' : '') + '><span class="muted" style="font-size:.8rem;margin-right:10px">' + (i + 1) + '</span>' + txt + '</button>';
+      }).join('');
+      var transcript = (answered || showText)
+        ? '<div class="panel ls-script">' + (x.intro ? '<div class="ls-line" data-k="intro"><span class="ls-sp sp-N">' + SP.N + '</span><div class="ja tap">' + S.ruby(x.intro) + '</div></div>' : '') +
+          x.lines.map(lineHtml).join('') + (x.question ? '<div class="ls-line" data-k="q"><span class="ls-sp sp-N">' + SP.N + '</span><div class="ja tap"><b>' + S.ruby(x.question) + '</b></div></div>' : '') +
+          (answered ? '<div class="ls-tools"><button class="btn btn-small" type="button" id="enT">' + (showEn ? 'Hide English' : 'Show English') + '</button></div>' : '') + '</div>'
+        : '';
+      main.innerHTML = '<div class="study-head"><div class="deck-ic d-listen">' + S.icon(S.SECTIONS.listen.icon) + '</div>' +
+        '<div><h1>No. ' + (idx + 1) + ' <span class="muted" style="font-size:1rem;font-family:var(--s-f-ui)">of ' + items.length + '</span></h1>' +
+        '<div class="muted" style="font-size:.88rem">' + L.toUpperCase() + ' · <span class="jp">' + T.jp + '</span> · ' + T.en + '</div></div>' +
+        '<div class="set-nav">' + (idx > 0 ? '<a class="icon-btn" href="listening.html?l=' + L + '&i=' + idx + '" aria-label="Previous">' + S.icon(S.ICONS.left) + '</a>' : '') +
+        (idx < items.length - 1 ? '<a class="icon-btn" href="listening.html?l=' + L + '&i=' + (idx + 2) + '" aria-label="Next">' + S.icon(S.ICONS.right) + '</a>' : '') + '</div>' +
+        '<a class="btn btn-small" style="margin-left:auto" href="listening.html?l=' + L + '">All questions</a></div>' +
+        '<div class="fc-stage ls-stage">' +
+          '<div class="panel ls-top"><div class="muted ls-how">' + T.how + '</div>' +
+            (T.showIntro && x.intro ? '<div class="ls-situation jp tap">' + S.ruby(x.intro) + '</div>' : '') +
+            '<div class="ls-controls"><button class="btn btn-primary ls-play" type="button" id="play">' + S.icon('<path d="M7 5v14l12-7z"/>') + '<span>Play</span></button>' +
+            '<button class="toggle" type="button" id="txtT" aria-pressed="' + showText + '"' + (answered ? ' hidden' : '') + '><span class="sw"></span>Show text while listening</button></div></div>' +
+          (answered ? '' : transcript) +
+          '<div class="options">' + opts + '</div><div class="feedback" id="fb"></div>' +
+          (answered && x.explain ? '<div class="panel ls-explain"><b>Why:</b> ' + S.esc(x.explain) + '</div>' : '') +
+          (answered ? transcript : '') +
+          '<div class="ls-next">' + (answered ? (idx < items.length - 1 ? '<a class="btn btn-primary" id="next" href="listening.html?l=' + L + '&i=' + (idx + 2) + '">Next question ' + S.icon(S.ICONS.arrow) + '</a>' : '<a class="btn btn-primary" id="next" href="listening.html?l=' + L + '">Back to the list</a>') : '') + '</div>' +
+          '<div class="keys"><kbd>Space</kbd> play / stop · <kbd>1</kbd>–<kbd>' + x.options.length + '</kbd> answer' + (answered ? ' · <kbd>Enter</kbd> next' : '') + '</div>' +
+        '</div>' + voiceNote();
+      wire();
+    }
+    var playing = false;
+    function play() {
+      var btn = document.getElementById('play');
+      if (playing) { S.stopSpeaking(); return; }
+      var parts = script(); playing = true; paint();
+      S.speak(parts.map(function (q) { return { t: q.t, sp: q.sp }; }), null, {
+        rate: RATE, level: L,
+        onpart: function (i) {
+          Array.prototype.forEach.call(document.querySelectorAll('.ls-line.now'), function (e) { e.classList.remove('now'); });
+          var el = document.querySelector('.ls-line[data-k="' + parts[i].k + '"]'); if (el) el.classList.add('now');
+          var ob = /^o(\d)$/.exec(parts[i].k), all = document.querySelectorAll('.opt');
+          Array.prototype.forEach.call(all, function (b, j) { b.classList.toggle('now', !!ob && +ob[1] === j); });
+        }
+      }).then(function () { playing = false; paint(); Array.prototype.forEach.call(document.querySelectorAll('.now'), function (e) { e.classList.remove('now'); }); });
+      function paint() {
+        var b = document.getElementById('play'); if (!b) return;
+        b.innerHTML = S.icon(playing ? '<rect x="7" y="7" width="10" height="10" rx="1.5"/>' : '<path d="M7 5v14l12-7z"/>') + '<span>' + (playing ? 'Stop' : 'Play again') + '</span>';
+        b.classList.toggle('on', playing);
+      }
+    }
+    var picked = null;
+    function choose(i) {
+      if (answered) return; answered = true; picked = i;
+      S.stopSpeaking(); playing = false;
+      var ok = i === x.answer;
+      S.recordLR(x.id, ok);
+      draw(); restore();
+    }
+    function wire() {
+      document.getElementById('play').onclick = play;
+      var t = document.getElementById('txtT');
+      if (t) t.onclick = function () { showText = !showText; S.setting('lrText', showText); S.stopSpeaking(); playing = false; draw(); };
+      var e = document.getElementById('enT');
+      if (e) e.onclick = function () { showEn = !showEn; draw(); restore(); };
+      Array.prototype.forEach.call(document.querySelectorAll('.opt'), function (b) { b.onclick = function () { choose(+b.dataset.i); }; });
+    }
+    // redraws after answering (e.g. showing the English) keep the right / wrong colours
+    function restore() {
+      var bs = document.querySelectorAll('.opt');
+      bs[x.answer].classList.add('correct'); if (picked !== x.answer) bs[picked].classList.add('wrong');
+      document.getElementById('fb').innerHTML = picked === x.answer ? '<span style="color:var(--s-matcha-text)">正解 — correct!</span>' : '<span style="color:var(--s-shu-text)">Not quite — the answer is ' + (x.answer + 1) + '.</span>';
+    }
+    document.onkeydown = function (ev) {
+      if (ev.target.tagName === 'INPUT') return;
+      var n = parseInt(ev.key, 10);
+      if (ev.key === ' ') { ev.preventDefault(); play(); }
+      else if (n >= 1 && n <= x.options.length && !answered) choose(n - 1);
+      else if (ev.key === 'Enter' && answered) { var nx = document.getElementById('next'); if (nx) nx.click(); }
+    };
+    draw();
+  }
+})();
+</script>
+</body>
+</html>

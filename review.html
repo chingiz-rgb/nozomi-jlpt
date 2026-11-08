@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<script src="cards.js"></script>
+<script src="tap.js"></script>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"><div class="empty">Loading…</div></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, H = ShioriCards.H, main = document.getElementById('main');
+  // sessions are short; the daily limit (Settings → Reviews per day) keeps a backlog from landing all at once
+  var BY_LETTER = { g: 'grammar', k: 'kanji', v: 'vocab' }, SESSION = 10;
+  var EXTRA = new URLSearchParams(location.search).get('extra') === '1';
+  S.mount('review');
+
+  var G = S.game(), ids = S.dueIds(SESSION, EXTRA), total = EXTRA ? G.dueAll : G.due;
+  if (!ids.length) {
+    var waiting = G.dueAll;
+    main.innerHTML = '<div class="fc-stage" style="margin-top:40px"><div class="panel result"><div class="seal">済</div>' +
+      (waiting
+        ? '<h2>Today’s reviews are done</h2><p class="muted" style="margin:0;max-width:440px">You did ' + G.revDone + ' review' + (G.revDone === 1 ? '' : 's') + ' today (your limit is ' + G.revCap + ' a day). ' +
+          waiting + ' more ' + (waiting === 1 ? 'is' : 'are') + ' waiting — ' + (waiting === 1 ? 'it comes' : 'they come') + ' over the next days, so nothing is lost. Spend the time on new items instead.</p>' +
+          '<div class="actions"><a class="btn btn-primary" href="plan.html">Today’s plan</a><a class="btn" href="review.html?extra=1">Do ' + Math.min(SESSION, waiting) + ' more anyway</a></div>'
+        : '<h2>Nothing to review right now</h2><p class="muted" style="margin:0;max-width:420px">Mastered cards come back after a few days, then 1, 2, 4 weeks and longer — just before you\'d forget them. At most ' + G.revCap + ' a day (change it in Settings).</p>' +
+          '<div class="actions"><a class="btn btn-primary" href="index.html">Home</a></div>') +
+      '</div></div>';
+    return;
+  }
+
+  // load every data file the due cards come from
+  var need = {}, entries = [];
+  ids.forEach(function (id) { var m = /^(n\d)([gkv])(\d+)$/.exec(id); if (m) need[m[1] + '_' + BY_LETTER[m[2]]] = [m[1], BY_LETTER[m[2]]]; });
+  var keys = Object.keys(need), loaded = 0, data = {};
+  keys.forEach(function (key) {
+    S.load(need[key][0], need[key][1], function (items) {
+      data[key] = {}; (items || []).forEach(function (it) { data[key][it.id] = it; });
+      if (++loaded === keys.length) start();
+    });
+  });
+
+  function start() {
+    ids.forEach(function (id) {
+      var m = /^(n\d)([gkv])\d+$/.exec(id), deck = BY_LETTER[m[2]], it = data[m[1] + '_' + deck][id];
+      if (it) entries.push({ it: it, deck: deck, level: m[1] });
+    });
+    entries = ShioriCards.shuffle(entries);
+    var pos = 0, flipped = false, kept = 0, earned = 0;
+    main.innerHTML = '<div class="study-head"><div class="deck-ic d-kanji">' + S.icon('<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/>') + '</div>' +
+      '<div><h1>Review <span class="jp muted" style="font-size:1.1rem">復習</span></h1><div class="muted" style="font-size:.88rem">' +
+      entries.length + ' cards' + (total > entries.length ? ' · ' + (total - entries.length) + ' more after this' : '') + ' · all levels</div></div></div><div id="body"></div>';
+    var body = document.getElementById('body');
+
+    function draw() {
+      if (pos >= entries.length) return finish();
+      var e = entries[pos], h = H[e.deck], tag = e.level.toUpperCase() + ' ' + S.DECKS[e.deck].name;
+      body.innerHTML = '<div class="fc-stage">' +
+        '<div class="fc-progress"><span>' + (pos + 1) + ' / ' + entries.length + '</span><div class="bar"><i style="width:' + (pos / entries.length * 100) + '%"></i></div><span class="pts-run">+' + earned + '</span></div>' +
+        '<div class="fc" id="card" tabindex="0" role="button"><span class="fc-tag">' + tag + '</span>' +
+          (flipped ? h.back(e.it) + '<span class="fc-speak">' + S.speakBtn(h.say(e.it)) + '</span>'
+                   : h.front(e.it) + '<div class="fc-hint">Still remember it? Tap to check</div>') + '</div>' +
+        (flipped ? '<div class="grade"><button class="btn btn-no" id="no" type="button">Forgot</button><button class="btn btn-yes" id="yes" type="button">Remembered</button></div>'
+                 : '<div class="grade"><button class="btn btn-primary" id="flip" type="button" style="grid-column:1/-1">Show answer</button></div>') +
+        '<div class="keys"><kbd>Space</kbd> flip · <kbd>1</kbd> forgot · <kbd>2</kbd> remembered</div></div>';
+      document.getElementById('card').addEventListener('click', function (ev) { if (!ev.target.closest('[data-say]') && !flipped) flip(); });
+      if (flipped) { document.getElementById('no').onclick = function () { grade(false); }; document.getElementById('yes').onclick = function () { grade(true); }; }
+      else document.getElementById('flip').onclick = flip;
+    }
+    function flip() { flipped = true; draw(); S.autoSpeak(H[entries[pos].deck].say(entries[pos].it)); }
+    function grade(ok) { S.stopSpeaking(); var r = S.record(entries[pos].it.id, ok, 'review'); earned += r.xp; if (ok) kept++; pos++; flipped = false; draw(); }
+    function finish() {
+      document.onkeydown = null;
+      var pct = Math.round(kept / entries.length * 100), g = S.game(), more = EXTRA ? g.dueAll : g.due;
+      body.innerHTML = '<div class="fc-stage"><div class="panel result"><div class="seal press">' + ShioriCards.sealFor(pct) + '</div>' +
+        '<h2>Review done — ' + kept + ' / ' + entries.length + ' remembered</h2>' +
+        '<div class="stats"><div><b>' + kept + '</b><span>stay mastered</span></div><div><b>' + (entries.length - kept) + '</b><span>back to learning</span></div><div><b>' + more + '</b><span>left today</span></div></div>' +
+        '<div class="reward"><span class="pts">+' + earned + ' points</span><span class="gl">' + (g.metToday ? 'Daily goal done · ' + g.streak + '-day streak' : g.today + ' / ' + g.goal + ' cards today') + '</span></div>' +
+        '<p class="muted" style="margin:0;max-width:420px;font-size:.88rem">Remembered cards come back later each time. Forgotten ones lose their mastered status — practise them again in their set.</p>' +
+        '<div class="actions">' + (more ? '<a class="btn btn-primary" href="review.html' + (EXTRA ? '?extra=1' : '') + '">Next ' + Math.min(more, SESSION) + '</a>' : '<a class="btn btn-primary" href="plan.html">Today’s plan</a>') + '<a class="btn" href="index.html">Home</a></div></div></div>';
+    }
+    document.onkeydown = function (ev) {
+      if ((ev.key === ' ' || ev.key === 'Enter') && !flipped && pos < entries.length) { ev.preventDefault(); flip(); }
+      else if (flipped && ev.key === '1') grade(false);
+      else if (flipped && ev.key === '2') grade(true);
+    };
+    draw();
+  }
+})();
+</script>
+</body>
+</html>

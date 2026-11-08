@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Study | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<script src="cards.js"></script>
+<script src="tap.js"></script>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"><div class="empty">Loading…</div></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, P = S.params(), L = P.level, D = P.deck;
+  // s=all: review the whole deck (the items you've studied) instead of one set
+  var ALL = new URLSearchParams(location.search).get('s') === 'all';
+  var MODES = [['list', 'List'], ['skim', 'Browse'], ['cards', 'Flashcards'], ['quiz', D === 'kanji' ? 'Readings quiz' : 'Quiz']].concat(D === 'kanji' ? [['compounds', 'Compounds']] : []);
+  if (ALL) MODES = MODES.slice(1);
+  var MODE = MODES.some(function (m) { return m[0] === P.mode; }) ? P.mode : MODES[0][0];
+  var DK = S.DECKS[D], main = document.getElementById('main');
+  S.mount(L, L, D);
+  document.title = L.toUpperCase() + ' ' + DK.name + (ALL ? (MODE === 'skim' ? ' · Browse' : ' · Review all') : ' · Set ' + P.set) + ' | Nozomi';
+
+  var C = ShioriCards, H = C.H, shuffle = C.shuffle, sealFor = C.sealFor;
+
+  /* ---------- page ---------- */
+  S.load(L, D, function (items) {
+    if (!items || !items.length) {
+      main.innerHTML = '<div class="panel empty" style="margin-top:40px"><h2 class="jp">準備中</h2>' + L.toUpperCase() + ' ' + DK.name.toLowerCase() + ' is coming soon.</div>';
+      return;
+    }
+    var all = S.sets(items, D), n = all.length, k = ALL ? 'all' : Math.min(P.set, n), set;
+    var seen = [];
+    if (ALL && MODE === 'skim') set = items.filter(function (it) { return !S.itemState(it.id).m; });   // whole deck in order, not mastered yet
+    else if (ALL) {
+      seen = items.filter(function (it) { return S.itemState(it.id).t; });
+      set = shuffle(seen.length ? seen : items).slice(0, MODE === 'cards' ? 50 : 20);
+    } else { set = all[k - 1]; S.setLast({ l: L, d: D, s: k, m: MODE }); }
+    function url(kk, m) { return 'study.html?l=' + L + '&d=' + D + '&s=' + kk + '&m=' + (m || MODE); }
+
+    var head = '<div class="study-head">' +
+      '<div class="deck-ic d-' + D + '">' + S.icon(DK.icon) + '</div>' +
+      (ALL ? '<div><h1>' + (MODE === 'skim' ? 'Browse the deck <span class="jp muted" style="font-size:1.1rem">ざっと見る</span>' : 'Review all <span class="jp muted" style="font-size:1.1rem">総復習</span>') + '</h1>' +
+          '<div class="muted" style="font-size:.88rem">' + L.toUpperCase() + ' · ' + DK.name + ' · ' + (MODE === 'skim' ? set.length.toLocaleString() + ' ' + H[D].noun + ' not mastered yet, in order' : set.length + ' random ' + H[D].noun + (seen.length ? ' you’ve studied' : '')) + '</div></div>' +
+          '<div class="set-nav"><a class="btn btn-small" href="deck.html?l=' + L + '&d=' + D + '">All sets</a></div>'
+        : '<div><h1>Set ' + k + ' <span class="muted" style="font-size:1rem;font-family:var(--s-f-ui)">of ' + n + '</span></h1>' +
+          '<div class="muted" style="font-size:.88rem">' + L.toUpperCase() + ' · ' + DK.name + ' · ' + set.length + ' ' + H[D].noun + '</div></div>' +
+          '<div class="set-nav">' +
+            (k > 1 ? '<a class="icon-btn" href="' + url(k - 1) + '" title="Previous set" aria-label="Previous set">' + S.icon(S.ICONS.left) + '</a>' : '') +
+            (k < n ? '<a class="icon-btn" href="' + url(k + 1) + '" title="Next set" aria-label="Next set">' + S.icon(S.ICONS.right) + '</a>' : '') +
+          '</div>') +
+      '<nav class="modes" aria-label="Study mode">' +
+        MODES.map(function (m) {
+          return '<a href="' + url(k, m[0]) + '"' + (m[0] === MODE ? ' class="on" aria-current="page"' : '') + '>' + m[1] + '</a>';
+        }).join('') + '</nav></div>';
+
+    main.innerHTML = head + '<div id="body"></div>';
+    var earned = 0;
+    function pts() { return '<span class="pts-run" title="Points earned this session">+' + earned + '</span>'; }
+    function setBonus() { if (ALL) return; var p = S.setProgress(L, D, k); if (p.mastered === p.total) earned += S.completeSet(L + D + k); }
+    var body = document.getElementById('body');
+    if (MODE === 'list') renderList(); else if (MODE === 'skim') renderSkim(); else if (MODE === 'cards') renderCards(); else if (MODE === 'compounds') runCompounds(); else renderQuiz();
+
+    /* ----- list ----- */
+    function renderList() {
+      var furi = S.setting('furigana') !== false;
+      document.body.classList.toggle('no-furi', !furi);
+      body.innerHTML = '<div class="toolbar">' +
+        '<button class="toggle" type="button" id="furiT" aria-pressed="' + furi + '"><span class="sw"></span>' + (D === 'kanji' ? 'Readings' : 'Furigana / readings') + '</button>' +
+        '<span class="muted" style="font-size:.85rem">Turn off to test yourself · tap the speaker to listen</span>' +
+        '<span class="tb-right"><button class="btn btn-small" type="button" id="markSet"></button>' +
+        '<a class="btn btn-primary btn-small" href="' + url(k, 'cards') + '">Start flashcards ' + S.icon(S.ICONS.arrow) + '</a></span></div>' +
+        '<div class="items" id="items"></div>';
+      var mb = document.getElementById('markSet'), allM = false;
+      function paint() {
+        document.getElementById('items').innerHTML = set.map(function (it) { return H[D].list(it, !!S.itemState(it.id).m); }).join('');
+        allM = set.every(function (it) { return S.itemState(it.id).m; });
+        mb.innerHTML = S.icon(S.ICONS.check) + (allM ? 'Unmark this set' : 'I know this whole set');
+        mb.title = allM ? 'Take back every mastered mark in this set' : 'Mark every item in this set as mastered';
+      }
+      paint();
+      document.getElementById('furiT').addEventListener('click', function () {
+        var on = this.getAttribute('aria-pressed') !== 'true';
+        this.setAttribute('aria-pressed', on); S.setting('furigana', on); document.body.classList.toggle('no-furi', !on);
+      });
+      mb.onclick = function () { S.markMastered(set.map(function (it) { return it.id; }), !allM); paint(); };
+      document.getElementById('items').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-mark]'); if (!b) return;
+        S.markMastered([b.dataset.mark], b.getAttribute('aria-pressed') !== 'true');
+        paint();
+      });
+    }
+
+    /* ----- skim: the whole item on one card, decide fast — "I know this" marks it mastered ----- */
+    function renderSkim() {
+      if (!set.length) {
+        body.innerHTML = '<div class="fc-stage"><div class="panel result"><div class="seal">完</div><h2>Everything here is mastered</h2>' +
+          '<div class="actions"><a class="btn btn-primary" href="deck.html?l=' + L + '&d=' + D + '">All sets</a></div></div></div>';
+        return;
+      }
+      var pos = 0, known = 0, later = 0, hist = [];
+      function draw() {
+        if (pos >= set.length) return finish();
+        var it = set[pos], m = !!S.itemState(it.id).m;
+        body.innerHTML = '<div class="fc-stage">' +
+          '<div class="fc-progress"><span>' + (pos + 1).toLocaleString() + ' / ' + set.length.toLocaleString() + '</span><div class="bar"><i style="width:' + (pos / set.length * 100) + '%"></i></div><span>' + known + ' known</span></div>' +
+          '<div class="fc skim-card"><span class="fc-tag">Browse' + (m ? ' · mastered' : '') + '</span>' + H[D].back(it) +
+            '<span class="fc-speak">' + S.speakBtn(H[D].say(it)) + '</span></div>' +
+          '<div class="grade"><button class="btn btn-no" id="no" type="button">Learn it later</button><button class="btn btn-yes" id="yes" type="button">I know this</button></div>' +
+          '<div class="keys">' + (hist.length ? '<button class="linkish" id="undo" type="button">' + S.icon(S.ICONS.left) + 'Back</button> · ' : '') +
+            '<kbd>1</kbd> later · <kbd>2</kbd> I know it · <kbd>Backspace</kbd> back</div></div>';
+        document.getElementById('no').onclick = function () { decide(false); };
+        document.getElementById('yes').onclick = function () { decide(true); };
+        var u = document.getElementById('undo'); if (u) u.onclick = undo;
+        if (hist.length) S.autoSpeak(H[D].say(it));          // not on the first card: opening a set stays quiet
+      }
+      function decide(ok) {
+        var it = set[pos], was = !!S.itemState(it.id).m;
+        if (ok && !was) S.markMastered([it.id], true);
+        hist.push({ id: it.id, ok: ok, marked: ok && !was });
+        if (ok) known++; else later++;
+        pos++; draw();
+      }
+      function undo() {
+        var h = hist.pop(); if (!h) return;
+        if (h.marked) S.markMastered([h.id], false, true);
+        if (h.ok) known--; else later--;
+        pos--; draw();
+      }
+      function finish() {
+        document.onkeydown = null;
+        body.innerHTML = '<div class="fc-stage"><div class="panel result"><div class="seal press">' + (later ? '良' : '優') + '</div>' +
+          '<h2>Browse done</h2><div class="stats"><div><b>' + known + '</b><span>marked known</span></div><div><b>' + later + '</b><span>to learn</span></div></div>' +
+          '<p class="muted" style="margin:0;max-width:440px;font-size:.88rem">Known items count as mastered now. Each comes back once in a few weeks for a quick check, so nothing slips.</p>' +
+          '<div class="actions">' + (later && !ALL ? '<a class="btn btn-primary" href="' + url(k, 'cards') + '">Learn the rest · flashcards</a>' : '') +
+          (!ALL && k < n ? '<a class="btn' + (later ? '' : ' btn-primary') + '" href="' + url(k + 1, 'skim') + '">Browse next set ' + S.icon(S.ICONS.arrow) + '</a>' : '') +
+          '<a class="btn' + (ALL ? ' btn-primary' : '') + '" href="deck.html?l=' + L + '&d=' + D + '">All sets</a></div></div></div>';
+      }
+      document.onkeydown = function (e) {
+        if (e.target.tagName === 'INPUT' || pos >= set.length) return;
+        if (e.key === '1') decide(false);
+        else if (e.key === '2') decide(true);
+        else if (e.key === 'Backspace') { e.preventDefault(); undo(); }
+      };
+      draw();
+    }
+
+    /* ----- flashcards ----- */
+    function renderCards() {
+      var queue = set.slice(), pos = 0, flipped = false, retried = {}, firstTry = {}, newly = 0, done = 0;
+      function draw() {
+        if (pos >= queue.length) return finish();
+        var it = queue[pos];
+        body.innerHTML = '<div class="fc-stage">' +
+          '<div class="fc-progress"><span>' + Math.min(done + 1, set.length) + ' / ' + set.length + '</span><div class="bar"><i style="width:' + (done / set.length * 100) + '%"></i></div><span>' + (retried[it.id] ? 'Again · ' : '') + pts() + '</span></div>' +
+          '<div class="fc" id="card" tabindex="0" role="button" aria-label="' + (flipped ? 'Card back' : 'Flip card') + '">' +
+            '<span class="fc-tag">' + DK.name + (S.itemState(it.id).m ? ' · mastered' : '') + '</span>' +
+            (flipped ? H[D].back(it) + '<span class="fc-speak">' + S.speakBtn(H[D].say(it)) + '</span>'
+                     : H[D].front(it) + '<div class="fc-hint">Recall it, then tap to reveal</div>') +
+          '</div>' +
+          (flipped
+            ? '<div class="grade"><button class="btn btn-no" id="no" type="button">Didn\'t know</button><button class="btn btn-yes" id="yes" type="button">Knew it</button></div>'
+            : '<div class="grade"><button class="btn btn-primary" id="flip" type="button" style="grid-column:1/-1">Show answer</button></div>') +
+          '<div class="keys"><kbd>Space</kbd> flip · <kbd>1</kbd> didn\'t know · <kbd>2</kbd> knew it</div></div>';
+        var card = document.getElementById('card');
+        card.addEventListener('click', function (e) { if (!e.target.closest('[data-say]') && !flipped) flip(); });
+        if (flipped) {
+          document.getElementById('no').onclick = function () { grade(false); };
+          document.getElementById('yes').onclick = function () { grade(true); };
+        } else document.getElementById('flip').onclick = flip;
+      }
+      function flip() { flipped = true; draw(); S.autoSpeak(H[D].say(queue[pos])); }
+      function grade(ok) {
+        S.stopSpeaking();                                   // the next card's front shouldn't keep talking
+        var it = queue[pos], r = S.record(it.id, ok, 'cards');
+        earned += r.xp;
+        if (!(it.id in firstTry)) firstTry[it.id] = ok;
+        if (r.newlyMastered) newly++;
+        if (!ok && !retried[it.id]) { retried[it.id] = true; queue.push(it); } else done++;
+        pos++; flipped = false; draw();
+      }
+      function finish() {
+        var known = 0; for (var id in firstTry) if (firstTry[id]) known++;
+        var pct = Math.round(known / set.length * 100);
+        setBonus();
+        result(sealFor(pct), pct >= 80 ? 'Excellent — 優' : pct >= 50 ? 'Good work — 良' : 'Keep going — 可',
+          [[known + '/' + set.length, 'known first try'], [newly, 'newly mastered'],
+           ALL ? [set.filter(function (it) { return S.itemState(it.id).m; }).length + '/' + set.length, 'mastered now'] : [S.setProgress(L, D, k).mastered + '/' + set.length, 'set mastered']]);
+      }
+      document.onkeydown = function (e) {
+        if (e.target.tagName === 'INPUT') return;
+        if ((e.key === ' ' || e.key === 'Enter') && !flipped && pos < queue.length) { e.preventDefault(); flip(); }
+        else if (flipped && e.key === '1') grade(false);
+        else if (flipped && e.key === '2') grade(true);
+      };
+      draw();
+    }
+
+    /* ----- quiz ----- */
+    // the main quiz: answers count toward mastery
+    function renderQuiz() {
+      var qs = shuffle(set).slice(0, ALL ? set.length : Math.min(10, set.length));
+      function go(gq) { runQuiz(qs, function (it, i) { return C.Q[D](it, items, i, gq); }, function (it, ok) { return S.record(it.id, ok, 'quiz').xp; }); }
+      if (D === 'grammar') { body.innerHTML = '<div class="empty">Loading…</div>'; S.load(L, 'gquiz', go); }
+      else go(null);
+    }
+    // kanji compounds: extra reading practice — points, but mastery comes from the readings quiz
+    function runCompounds() {
+      var pairs = [];
+      set.forEach(function (kj) { C.compounds(kj).forEach(function (e) { pairs.push({ k: kj, e: e }); }); });
+      if (!pairs.length) { body.innerHTML = '<div class="panel empty">No compound words for these kanji yet — try the readings quiz.</div>'; return; }
+      runQuiz(shuffle(pairs).slice(0, ALL ? 20 : 10), function (p) { return C.Q.compound(p.k, items, p.e); }, function (p, ok) { return S.practice(ok); });
+    }
+    function runQuiz(qs, build, rec) {
+      var qi = 0, score = 0, answered = false;
+      function draw() {
+        if (qi >= qs.length) {
+          var pct = Math.round(score / qs.length * 100);
+          if (score === qs.length && qs.length >= 10 && MODE === 'quiz') S.perfectQuiz();
+          setBonus();
+          return result(sealFor(pct), score + ' / ' + qs.length + ' correct', [[pct + '%', 'score'], [score, 'correct'], [qs.length - score, 'to review']]);
+        }
+        var it = qs[qi], q = build(it, qi);
+        answered = false;
+        body.innerHTML = '<div class="fc-stage">' +
+          '<div class="fc-progress"><span>' + (qi + 1) + ' / ' + qs.length + '</span><div class="bar"><i style="width:' + (qi / qs.length * 100) + '%"></i></div><span>Score ' + score + ' · ' + pts() + '</span></div>' +
+          '<div class="panel quiz-q"><div class="ask">' + q.ask + '</div>' +
+          '<div class="prompt' + q.cls + '" id="prompt">' + q.prompt + '</div><div id="reveal"></div></div>' +
+          '<div class="options">' + q.opts.map(function (o, i) {
+            return '<button class="opt' + (o.jp ? ' jp' : '') + '" type="button" data-ok="' + (o.ok ? 1 : 0) + '"><span class="muted" style="font-size:.8rem;margin-right:10px">' + (i + 1) + '</span>' + o.html + '</button>';
+          }).join('') + '</div><div class="feedback" id="fb"></div>' +
+          '<div style="text-align:center;margin-top:8px"><button class="btn btn-primary" id="next" type="button" hidden>Next ' + S.icon(S.ICONS.arrow) + '</button></div></div>';
+        Array.prototype.forEach.call(body.querySelectorAll('.opt'), function (b) { b.onclick = function () { choose(b); }; });
+        document.getElementById('next').onclick = function () { qi++; draw(); };
+        function choose(b) {
+          if (answered) return; answered = true;
+          var ok = b.getAttribute('data-ok') === '1';
+          if (ok) score++;
+          earned += rec(it, ok);
+          Array.prototype.forEach.call(body.querySelectorAll('.opt'), function (x) {
+            x.disabled = true;
+            if (x.getAttribute('data-ok') === '1') x.classList.add('correct'); else if (x === b) x.classList.add('wrong');
+          });
+          if (q.filled) document.getElementById('prompt').innerHTML = q.filled;
+          document.getElementById('prompt').classList.add('tap');          // answered: now tap any word for its meaning
+          document.getElementById('reveal').innerHTML = q.reveal;
+          document.getElementById('fb').innerHTML = (ok ? '<span style="color:var(--s-matcha-text)">正解 — correct!</span>' : '<span style="color:var(--s-shu-text)">Not quite — the answer is highlighted.</span>') +
+            ' ' + S.speakBtn(q.say);
+          var nx = document.getElementById('next'); nx.hidden = false; nx.focus({ preventScroll: true });
+        }
+      }
+      document.onkeydown = function (e) {
+        var n = parseInt(e.key, 10), opts = body.querySelectorAll('.opt');
+        if (n >= 1 && n <= opts.length && !answered) opts[n - 1].click();
+        else if (e.key === 'Enter' && answered) { var nx = document.getElementById('next'); if (nx) nx.click(); }
+      };
+      draw();
+    }
+
+    /* ----- shared result screen ----- */
+    function rewardHtml(xp) {
+      var g = S.game();
+      return '<div class="reward"><span class="pts">+' + xp + ' points</span>' +
+        '<span class="gl">' + (g.metToday ? 'Daily goal done · ' + g.streak + '-day streak' : g.today + ' / ' + g.goal + ' cards today') + '</span></div>' +
+        (g.metToday ? '' : '<div class="goal-line"><div class="bar"><i style="width:' + Math.min(100, g.today / g.goal * 100) + '%"></i></div>' + (g.goal - g.today) + ' more cards to reach today’s goal</div>');
+    }
+    function result(seal, title, stats) {
+      document.onkeydown = null;
+      body.innerHTML = '<div class="fc-stage"><div class="panel result"><div class="seal press">' + seal + '</div>' +
+        '<h2>' + S.esc(title) + '</h2>' +
+        '<div class="stats">' + stats.map(function (s) { return '<div><b>' + s[0] + '</b><span>' + s[1] + '</span></div>'; }).join('') + '</div>' +
+        rewardHtml(earned) +
+        '<div class="actions"><a class="btn" href="' + url(k) + '">Again</a>' +
+        (MODE === 'cards' ? '<a class="btn" href="' + url(k, 'quiz') + '">' + (ALL ? 'Quiz these' : 'Quiz this set') + '</a>' : '<a class="btn" href="' + url(k, 'cards') + '">Flashcards</a>') +
+        (k < n ? '<a class="btn btn-primary" href="' + url(k + 1, 'list') + '">Next set ' + S.icon(S.ICONS.arrow) + '</a>' : '<a class="btn btn-primary" href="deck.html?l=' + L + '&d=' + D + '">All sets</a>') +
+        '</div></div></div>';
+    }
+  });
+})();
+</script>
+</body>
+</html>

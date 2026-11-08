@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Level | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<style>
+.decks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.deck { padding: 22px; display: flex; flex-direction: column; gap: 12px; border-top: 4px solid var(--c); }
+.deck-top { display: flex; align-items: center; gap: 12px; }
+.deck h2 { margin: 0; font: 700 1.3rem var(--s-f-display); }
+.deck .count { font-size: .85rem; color: var(--s-ink-faint); }
+.deck p { margin: 0; font-size: .92rem; color: var(--s-ink-soft); flex: 1; }
+.deck .bar i { background: var(--c); }
+.deck .prog { font-size: .8rem; color: var(--s-ink-faint); display: flex; justify-content: space-between; }
+.deck .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.deck.soon { opacity: .6; }
+@media (max-width: 900px) { .decks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, L = S.params().level, info = S.LEVEL_INFO[L], C = SHIORI_MANIFEST.counts[L], size = SHIORI_MANIFEST.setSize;
+  S.mount(L, L, null);
+  document.title = L.toUpperCase() + ' | Nozomi';
+  var DESC = {
+    grammar: 'Patterns with meaning, how to form them, and example sentences with furigana and audio.',
+    kanji: 'Readings, meanings and real example words. One correct answer = mastered; spaced reviews keep it that way.',
+    vocab: 'Kanji compounds and kana words together, with readings and audio.'
+  };
+  var NOUN = { grammar: 'grammar points', kanji: 'kanji', vocab: 'words' };
+  var parts = S.DECK_ORDER.filter(function (d) { return C[d]; }).map(function (d) { return C[d].toLocaleString() + ' ' + NOUN[d]; });
+
+  document.getElementById('main').innerHTML =
+    '<section class="page-head"><div class="badge-lv">' + L.toUpperCase() + '</div><div>' +
+    '<h1><span class="jp">' + info.jp + '</span> · ' + info.en + '</h1>' +
+    '<p>' + (parts.join(' · ') || 'Content coming soon') + ' — split into small sets.</p></div></section>' +
+    '<section class="decks">' + S.DECK_ORDER.map(function (d) {
+      var DK = S.DECKS[d], n = C[d];
+      var top = '<div class="deck-top"><div class="deck-ic">' + S.icon(DK.icon) + '</div><div><h2>' + DK.name + ' <span class="jp muted" style="font-size:1rem">' + DK.jp + '</span></h2>' +
+        '<div class="count">' + (n ? n.toLocaleString() + ' ' + NOUN[d] + ' · ' + S.setCount(L, d) + ' sets of ' + (n % size[d] ? 'about ' : '') + size[d] : 'Coming soon') + '</div></div></div>';
+      if (!n) return '<div class="panel deck soon d-' + d + '">' + top + '<p>' + DESC[d] + '</p></div>';
+      var m = S.deckMastered(L, d), next = S.nextSet(L, d);
+      return '<div class="panel deck d-' + d + '">' + top + '<p>' + DESC[d] + '</p>' +
+        '<div class="prog"><span>' + m + ' / ' + n.toLocaleString() + ' mastered</span><span>' + Math.round(m / n * 100) + '%</span></div>' +
+        '<div class="bar"><i style="width:' + (m / n * 100) + '%"></i></div>' +
+        '<div class="acts">' + (m >= n ? '<a class="btn btn-primary" href="study.html?l=' + L + '&d=' + d + '&s=all&m=quiz">Review quiz</a>' : '<a class="btn btn-primary" href="study.html?l=' + L + '&d=' + d + '&s=' + next + '&m=list">' + (m ? 'Continue' : 'Start') + ' · Set ' + next + '</a>') +
+        '<a class="btn" href="study.html?l=' + L + '&d=' + d + '&s=all&m=skim" title="Go through what you haven’t mastered and mark what you already know">Browse</a>' +
+        '<a class="btn" href="deck.html?l=' + L + '&d=' + d + '">All sets</a></div></div>';
+    }).join('') + '</section>' + exam() + knowPanel();
+
+  // the other half of the JLPT: listening, reading and a full mock paper
+  function exam() {
+    var X = S.SECTIONS, txt = {
+      listen: 'Exam-style dialogues and announcements, read by separate male and female voices. Transcript and explanation after you answer.',
+      read: 'Notes, essays, notices and timetables with JLPT questions. Furigana can be switched off.',
+      test: 'A shortened paper in the real format — vocabulary, grammar, reading, listening — scored against the pass mark.'
+    };
+    return '<h2 class="section-title">試験対策 <small>Exam practice — the parts flashcards can’t cover</small></h2><section class="decks">' +
+      Object.keys(X).map(function (k) {
+        return '<a class="panel deck d-' + k + '" href="' + X[k].href + '?l=' + L + '"><div class="deck-top"><div class="deck-ic">' + S.icon(X[k].icon) + '</div>' +
+          '<div><h2>' + X[k].name + ' <span class="jp muted" style="font-size:1rem">' + X[k].jp + '</span></h2></div></div><p>' + txt[k] + '</p>' +
+          '<div class="acts"><span class="btn' + (k === 'test' ? ' btn-primary' : '') + '">' + (k === 'test' ? 'Take a test' : 'Open') + '</span></div></a>';
+      }).join('') + '</section>';
+  }
+
+  // master the whole level in one go — for levels you already know
+  function knowPanel() {
+    var left = 0, marked = 0;
+    S.DECK_ORDER.forEach(function (d) { if (C[d]) { left += C[d] - S.deckMastered(L, d); marked += S.markedCount(L, d); } });
+    return '<section class="panel know" style="margin-top:18px"><div><b>Already know ' + L.toUpperCase() + '?</b><span>' +
+      (left ? 'Mark the whole level — all ' + left.toLocaleString() + ' remaining grammar points, kanji and words — as mastered and move on. ' +
+        'They come back a few at a time over the next weeks for a quick check, so anything you’ve forgotten resurfaces. To pick item by item, use <b>Browse</b> on each deck.' : 'Every item in ' + L.toUpperCase() + ' is mastered. お疲れさま!') +
+      '</span></div><div class="ra-acts">' + (left ? '<button class="btn btn-small btn-primary" type="button" id="markLv">' + S.icon(S.ICONS.check) + 'Mark ' + L.toUpperCase() + ' mastered</button>' : '') +
+      (marked ? '<button class="btn btn-small" type="button" id="unmarkLv">Undo ' + marked.toLocaleString() + ' marks</button>' : '') + '</div></section>';
+  }
+  function levelIds() { var ids = []; S.DECK_ORDER.forEach(function (d) { if (C[d]) ids = ids.concat(S.deckIds(L, d)); }); return ids; }
+  var ml = document.getElementById('markLv'), ul = document.getElementById('unmarkLv');
+  if (ml) S.twoStep(ml, 'Tap again to confirm', function () { S.markMastered(levelIds(), true); location.reload(); });
+  if (ul) S.twoStep(ul, 'Tap again to undo', function () { S.markMastered(levelIds(), false, true); location.reload(); });
+})();
+</script>
+</body>
+</html>

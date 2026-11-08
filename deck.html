@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deck | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"><div class="empty">Loading…</div></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, P = S.params(), L = P.level, D = P.deck, DK = S.DECKS[D], main = document.getElementById('main');
+  S.mount(L, L, D);
+  document.title = L.toUpperCase() + ' ' + DK.name + ' | Nozomi';
+  var NOUN = { kanji: 'kanji', vocab: 'words', grammar: 'grammar points' }[D];
+  function label(it) { return D === 'kanji' ? it.k : D === 'vocab' ? it.w : S.plain(it.pattern); }
+  function hay(it) { return D === 'kanji' ? [it.k, it.m, it.on.join(' '), it.kun.join(' ')].join(' ') : D === 'vocab' ? [it.w, it.r, it.m].join(' ') : [S.plain(it.pattern), S.kana(it.pattern), it.meaning].join(' '); }
+  function sub(it) { return D === 'kanji' ? it.m : D === 'vocab' ? (it.r ? it.r + ' · ' : '') + it.m : it.meaning; }
+
+  S.load(L, D, function (items) {
+    var total = (items || []).length, size = SHIORI_MANIFEST.setSize[D];
+    var headHtml = '<section class="page-head"><div class="deck-ic d-' + D + '" style="width:64px;height:64px;border-radius:16px">' + S.icon(DK.icon) + '</div>' +
+      '<div style="flex:1;min-width:220px"><h1>' + L.toUpperCase() + ' ' + DK.name + ' <span class="jp muted" style="font-size:1.3rem">' + DK.jp + '</span></h1>';
+    if (!total) {
+      main.innerHTML = headHtml + '<p>Coming soon.</p></div></section><div class="panel empty"><h2 class="jp">準備中</h2>This deck is being prepared.</div>';
+      return;
+    }
+    var all = S.sets(items, D), mastered = S.deckMastered(L, D), next = S.nextSet(L, D);
+    // review the whole deck at once: a random mix of the items you've studied, from every set
+    function reviewAll() {
+      var seen = items.filter(function (it) { return S.itemState(it.id).t; }).length;
+      var u = 'study.html?l=' + L + '&d=' + D + '&s=all&m=';
+      return '<section class="panel review-all d-' + D + '"><div class="deck-ic">' + S.icon('<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/>') + '</div>' +
+        '<div class="ra-text"><b>Review all <span class="jp muted">総復習</span></b><span>' +
+        (seen ? 'A random mix of the ' + seen.toLocaleString() + ' ' + NOUN + ' you’ve studied, from every set.' : 'Nothing studied yet — this mixes the whole deck.') + '</span></div>' +
+        '<div class="ra-acts"><a class="btn btn-small" href="' + u + 'skim" title="Go through every item you haven’t mastered and mark the ones you already know">Browse</a>' +
+        '<a class="btn btn-small" href="' + u + 'cards">Flashcards</a>' +
+        '<a class="btn btn-small btn-primary" href="' + u + 'quiz">' + (D === 'kanji' ? 'Readings quiz' : 'Quiz') + '</a>' +
+        (D === 'kanji' ? '<a class="btn btn-small" href="' + u + 'compounds">Compounds</a>' : '') + '</div></section>';
+    }
+    main.innerHTML = headHtml +
+      '<p>' + total.toLocaleString() + ' ' + NOUN + ' in ' + all.length + ' sets of ' + (total % size ? 'about ' : '') + size + ' · <b>' + mastered + '</b> mastered</p></div>' +
+      (mastered >= total ? '<a class="btn btn-primary" href="study.html?l=' + L + '&d=' + D + '&s=all&m=quiz">Deck complete · Review quiz ' + S.icon(S.ICONS.arrow) + '</a>' : '<a class="btn btn-primary" href="study.html?l=' + L + '&d=' + D + '&s=' + next + '&m=list">' + (mastered ? 'Continue' : 'Start') + ' · Set ' + next + ' ' + S.icon(S.ICONS.arrow) + '</a>') + '</section>' +
+      reviewAll() + knowPanel() +
+      '<label class="search">' + S.icon(S.ICONS.search) + '<input type="search" id="q" placeholder="Search this deck (Japanese or English)…" autocomplete="off"></label>' +
+      '<div class="search-results" id="results"></div>' +
+      '<h2 class="section-title">Sets <small>small groups — finish one, then move on</small></h2>' +
+      '<div class="sets" id="sets"></div>';
+
+    // already know this deck? mark it all at once (or undo marks that were never answered)
+    function knowPanel() {
+      var left = total - mastered, marked = S.markedCount(L, D);
+      return '<section class="panel know"><div><b>Already know this deck?</b><span>' +
+        (left ? 'Mark all ' + left.toLocaleString() + ' remaining ' + NOUN + ' as mastered. They’ll come back a few at a time over the next weeks for a quick check. Not sure? Use <b>Browse</b> above to decide one by one.' : 'Everything in this deck is mastered.') +
+        '</span></div><div class="ra-acts">' + (left ? '<button class="btn btn-small" type="button" id="markDeck">' + S.icon(S.ICONS.check) + 'Mark deck mastered</button>' : '') +
+        (marked ? '<button class="btn btn-small" type="button" id="unmarkDeck">Undo ' + marked.toLocaleString() + ' marks</button>' : '') + '</div></section>';
+    }
+    var md = document.getElementById('markDeck'), ud = document.getElementById('unmarkDeck');
+    if (md) S.twoStep(md, 'Tap again to mark ' + (total - mastered).toLocaleString(), function () { S.markMastered(S.deckIds(L, D), true); location.reload(); });
+    if (ud) S.twoStep(ud, 'Tap again to undo', function () { S.markMastered(S.deckIds(L, D), false, true); location.reload(); });
+
+    document.getElementById('sets').innerHTML = all.map(function (set, i) {
+      var k = i + 1, p = S.setProgress(L, D, k), pct = Math.round(p.mastered / p.total * 100), done = p.mastered === p.total;
+      var status = done ? 'Complete' : p.seen ? p.mastered + ' / ' + p.total + ' mastered' : 'New';
+      return '<a class="panel set' + (done ? ' done' : '') + (k === next ? ' d-' + D : '') + '" href="study.html?l=' + L + '&d=' + D + '&s=' + k + '&m=list"' + (k === next ? ' style="border-color:var(--c)"' : '') + '>' +
+        (done ? '<span class="seal small">完</span>' : '') +
+        '<div class="set-top"><div><h3>Set ' + k + '</h3><div class="sub">' + set.length + ' ' + NOUN + ' · ' + status + '</div></div>' +
+        '<div class="ring" style="--p:' + pct + '" data-label="' + pct + '%"></div></div>' +
+        '<div class="peek">' + set.slice(0, 6).map(function (it) { return S.esc(label(it)); }).join('・') + '</div></a>';
+    }).join('');
+
+    var q = document.getElementById('q'), res = document.getElementById('results');
+    q.addEventListener('input', function () {
+      var v = q.value.trim().toLowerCase();
+      if (!v) { res.innerHTML = ''; return; }
+      var hits = [];
+      for (var i = 0; i < items.length && hits.length < 12; i++) if (hay(items[i]).toLowerCase().indexOf(v) >= 0) hits.push(i);
+      res.innerHTML = hits.length ? hits.map(function (i) {
+        var it = items[i], k = Math.min(Math.floor(i / size) + 1, all.length);   // the last set also holds the short leftover
+        return '<a class="panel" href="study.html?l=' + L + '&d=' + D + '&s=' + k + '&m=list"><b>' + S.esc(label(it)) + '</b>' +
+          '<span style="flex:1;color:var(--s-ink-soft)">' + S.esc(sub(it)) + '</span><span class="muted" style="font-size:.8rem">Set ' + k + '</span></a>';
+      }).join('') : '<div class="muted" style="padding:8px 4px">No matches in this deck.</div>';
+    });
+  });
+})();
+</script>
+</body>
+</html>

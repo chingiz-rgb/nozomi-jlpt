@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Account | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<style>
+.acct { max-width: 440px; margin: 44px auto 0; padding: 30px 28px; display: grid; gap: 16px; }
+.acct h1 { margin: 0; font: 700 1.7rem var(--s-f-display); text-align: center; }
+.acct .lead { margin: 0; text-align: center; color: var(--s-ink-soft); font-size: .95rem; }
+.tabs { display: flex; padding: 3px; border-radius: 100px; background: var(--s-card2); border: 1px solid var(--s-line); }
+.tabs button { flex: 1; border: none; background: none; padding: 8px; border-radius: 100px; cursor: pointer; font-weight: 500; color: var(--s-ink-soft); }
+.tabs button.on { background: var(--s-card); color: var(--s-ai-deep); font-weight: 700; box-shadow: var(--s-shadow); }
+.field { display: grid; gap: 6px; font-size: .85rem; color: var(--s-ink-soft); font-weight: 700; }
+.field input { font: 500 1rem var(--s-f-ui); padding: 12px 14px; border-radius: 12px; border: 1px solid var(--s-line); background: var(--s-card); color: var(--s-ink); }
+.field input:focus { outline: none; border-color: var(--s-ai); box-shadow: 0 0 0 3px var(--s-ai-soft); }
+.acct .btn { width: 100%; }
+.or { display: flex; align-items: center; gap: 12px; color: var(--s-ink-faint); font-size: .8rem; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--s-line); }
+.google svg { width: 18px; height: 18px; }
+.msg { font-size: .9rem; padding: 10px 14px; border-radius: 12px; }
+.msg.ok { background: var(--s-matcha-soft); color: var(--s-matcha-text); }
+.msg.err { background: var(--s-shu-soft); color: var(--s-shu-text); }
+.link { background: none; border: none; color: var(--s-ai-deep); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font-size: .88rem; padding: 0; justify-self: center; }
+.small { font-size: .8rem; color: var(--s-ink-faint); text-align: center; margin: 0; }
+.who { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 14px; background: var(--s-card2); }
+.who .av { width: 48px; height: 48px; border-radius: 50%; background: var(--s-ai); color: var(--s-on); display: grid; place-items: center; font: 800 1.3rem var(--s-f-display); flex: none; }
+.who b { display: block; word-break: break-all; }
+.danger { color: var(--s-shu-text) !important; border-color: var(--s-shu-line) !important; }
+</style>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap"><section class="panel acct" id="box"><div class="empty">Loading…</div></section></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, Y = window.ShioriSync, box = document.getElementById('box'), mode = 'in', recovering = /type=recovery/.test(location.hash);
+  S.mount('account');
+  var here = location.origin + location.pathname;
+  function msg(text, ok) { var m = document.getElementById('msg'); if (m) { m.className = 'msg ' + (ok ? 'ok' : 'err'); m.textContent = text; m.hidden = !text; } }
+  function busy(b, on, label) { b.disabled = on; if (label) b.textContent = label; }
+  var G = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+
+  if (!Y || !Y.enabled) {
+    box.innerHTML = '<h1>Account</h1><p class="lead">Accounts aren\'t switched on for this copy of Nozomi yet.</p>' +
+      '<p class="small">Your progress is saved in this browser. Once the site is connected to its database, you can sign in here to keep progress across devices.</p>' +
+      '<a class="btn" href="index.html">Back home</a>';
+    return;
+  }
+
+  function render() {
+    var u = Y.user();
+    if (recovering) return renderReset();
+    if (u) return renderSignedIn(u);
+    box.innerHTML = '<h1 class="jp">' + (mode === 'up' ? 'はじめまして' : 'おかえり') + '</h1>' +
+      '<p class="lead">' + (mode === 'up' ? 'Create an account to keep your progress on every device.' : 'Sign in to sync your progress across devices.') + '</p>' +
+      '<div class="tabs"><button type="button" id="tIn"' + (mode === 'in' ? ' class="on"' : '') + '>Sign in</button><button type="button" id="tUp"' + (mode === 'up' ? ' class="on"' : '') + '>Create account</button></div>' +
+      '<button class="btn google" type="button" id="google">' + G + 'Continue with Google</button>' +
+      '<div class="or">or with email</div>' +
+      '<form id="f" style="display:grid;gap:14px">' +
+        '<label class="field">Email<input type="email" id="email" autocomplete="email" required></label>' +
+        '<label class="field">Password<input type="password" id="pw" minlength="8" autocomplete="' + (mode === 'up' ? 'new-password' : 'current-password') + '" required></label>' +
+        '<div class="msg" id="msg" hidden></div>' +
+        '<button class="btn btn-primary" type="submit" id="go">' + (mode === 'up' ? 'Create account' : 'Sign in') + '</button></form>' +
+      (mode === 'in' ? '<button class="link" type="button" id="forgot">Forgot password?</button>' : '<p class="small">At least 8 characters. We\'ll send a confirmation email.</p>') +
+      '<p class="small">Progress you made before signing in is kept and added to your account. <a href="privacy.html" style="text-decoration:underline">Privacy</a></p>';
+    document.getElementById('tIn').onclick = function () { mode = 'in'; render(); };
+    document.getElementById('tUp').onclick = function () { mode = 'up'; render(); };
+    document.getElementById('google').onclick = function () {
+      Y.client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: here } }).then(function (r) { if (r.error) msg(r.error.message); });
+    };
+    var fg = document.getElementById('forgot');
+    if (fg) fg.onclick = function () {
+      var email = document.getElementById('email').value.trim();
+      if (!email) return msg('Type your email above first, then press "Forgot password?".');
+      Y.client.auth.resetPasswordForEmail(email, { redirectTo: here }).then(function (r) {
+        msg(r.error ? r.error.message : 'If an account exists for ' + email + ', a reset link is on its way.', !r.error);
+      });
+    };
+    document.getElementById('f').onsubmit = function (e) {
+      e.preventDefault();
+      var email = document.getElementById('email').value.trim(), pw = document.getElementById('pw').value, go = document.getElementById('go');
+      busy(go, true, mode === 'up' ? 'Creating…' : 'Signing in…');
+      var p = mode === 'up'
+        ? Y.client.auth.signUp({ email: email, password: pw, options: { emailRedirectTo: here } })
+        : Y.client.auth.signInWithPassword({ email: email, password: pw });
+      p.then(function (r) {
+        busy(go, false, mode === 'up' ? 'Create account' : 'Sign in');
+        if (r.error) return msg(r.error.message);
+        if (mode === 'up' && !r.data.session) msg('Almost there — check ' + email + ' and click the confirmation link.', true);
+      });
+    };
+  }
+
+  function renderSignedIn(u) {
+    var g = S.game(), st = Y.status();
+    box.innerHTML = '<h1>Account</h1>' +
+      '<div class="who"><span class="av">' + S.esc((u.email || '?').charAt(0).toUpperCase()) + '</span><div><b>' + S.esc(u.email || '') + '</b>' +
+      '<span class="muted" id="st" style="font-size:.85rem">' + ({ synced: 'Progress saved to your account', saving: 'Saving…', offline: 'Offline — will save when you\'re back online', error: 'Couldn\'t reach the server — will retry' }[st] || 'Connecting…') + '</span></div></div>' +
+      '<div class="stats" style="margin:0 auto"><div><b>' + g.level + '</b><span>level</span></div><div><b>' + g.streak + '</b><span>day streak</span></div><div><b>' + Object.keys(g.stamps).length + '</b><span>stamps</span></div></div>' +
+      '<div class="msg" id="msg" hidden></div>' +
+      '<a class="btn btn-primary" href="index.html">Keep studying</a>' +
+      '<button class="btn" type="button" id="out">Sign out</button>' +
+      '<button class="btn danger" type="button" id="wipe">Reset all my progress</button>' +
+      '<p class="small">Signing out keeps a copy of your progress in this browser. To delete your account completely, see the <a href="privacy.html" style="text-decoration:underline">privacy page</a>.</p>';
+    document.getElementById('out').onclick = function () { Y.client.auth.signOut().then(function () { mode = 'in'; render(); S.mount('account'); }); };
+    document.getElementById('wipe').onclick = function () {
+      if (!confirm('Reset ALL progress — mastered cards, points, streak and stamps — here and on every device? Your settings and exam plan are kept. This can’t be undone.')) return;
+      // a fresh record stamped with the reset time; other devices drop anything older when they next sync
+      var fresh = { settings: S._read().settings, resetAt: Date.now(), v3: 1, v4: 1, v5: 1 };
+      S._write(fresh, true);
+      Y.client.from('progress').upsert({ user_id: u.id, data: Y.merge(fresh, null), updated_at: new Date().toISOString() }).then(function (r) {
+        renderSignedIn(u); S.refreshStats();
+        msg(r.error ? 'Reset in this browser, but the account copy couldn’t be updated: ' + r.error.message : 'All progress reset. Other devices reset the next time they open Nozomi.', !r.error);
+      });
+    };
+  }
+
+  function renderReset() {
+    box.innerHTML = '<h1>New password</h1><p class="lead">Choose a new password for your account.</p>' +
+      '<form id="f" style="display:grid;gap:14px"><label class="field">New password<input type="password" id="pw" minlength="8" autocomplete="new-password" required></label>' +
+      '<div class="msg" id="msg" hidden></div><button class="btn btn-primary" type="submit" id="go">Save password</button></form>';
+    document.getElementById('f').onsubmit = function (e) {
+      e.preventDefault();
+      Y.client.auth.updateUser({ password: document.getElementById('pw').value }).then(function (r) {
+        if (r.error) return msg(r.error.message);
+        recovering = false; history.replaceState(null, '', here); msg('Password updated.', true); setTimeout(render, 900);
+      });
+    };
+  }
+
+  Y.client.auth.onAuthStateChange(function (event) { if (event === 'PASSWORD_RECOVERY') recovering = true; render(); });
+  document.addEventListener('shiori-sync', function () { if (Y.user() && !recovering) { var el = document.getElementById('st'); if (el) render(); } });
+  Y.client.auth.getSession().then(render);
+})();
+</script>
+</body>
+</html>

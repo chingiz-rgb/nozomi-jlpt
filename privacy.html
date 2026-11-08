@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<style>
+.doc { max-width: 680px; margin: 40px auto 0; padding: 30px 32px; }
+.doc h1 { margin: 0 0 6px; font: 700 1.8rem var(--s-f-display); }
+.doc h2 { font: 700 1.15rem var(--s-f-display); margin: 26px 0 6px; }
+.doc p, .doc li { color: var(--s-ink-soft); }
+</style>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap">
+  <article class="panel doc">
+    <h1>Privacy</h1>
+    <p class="muted">Short version: Nozomi only stores what it needs to save your study progress.</p>
+
+    <h2>Without an account</h2>
+    <p>Your progress (which cards you've studied and mastered, review dates, points, streak, stamps and settings) is saved only in your browser's local storage. Nothing is sent to a server.</p>
+
+    <h2>With an account</h2>
+    <ul>
+      <li><b>What's stored:</b> your email address (or your Google account's email if you sign in with Google), and one copy of the progress record described above.</li>
+      <li><b>Where:</b> in a database hosted by Supabase. Database rules make sure each account can only read and change its own progress.</li>
+      <li><b>Why:</b> only so your progress follows you between devices. It isn't sold, shared or used for advertising, and Nozomi has no ads or tracking.</li>
+    </ul>
+
+    <h2>Deleting your data</h2>
+    <p>On the <a href="account.html" style="text-decoration:underline">account page</a> you can delete the progress saved to your account at any time. To delete your whole account (including your email), contact the site owner and it will be removed.</p>
+
+    <h2>Voice</h2>
+    <p>Read-aloud uses your browser's built-in speech voices. Depending on your browser, the text being read may be processed by your browser's own speech service.</p>
+  </article>
+</main>
+<div id="foot"></div>
+<script>Shiori.mount('privacy');</script>
+</body>
+</html>

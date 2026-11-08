@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reading | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<script src="tap.js"></script>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"><div class="empty">Loading…</div></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, p = new URLSearchParams(location.search), L = S.params().level, main = document.getElementById('main');
+  var I = parseInt(p.get('i'), 10);
+  S.mount(L, L, 'read');
+  var TYPES = {
+    short: { jp: '内容理解（短文）', en: 'Short passages', how: 'About 200 characters — a note, email or notice. Find the main point.' },
+    mid: { jp: '内容理解（中文）', en: 'Mid-size passages', how: 'An essay or explanation. Follow the reasons and what words like 「それ」 point to.' },
+    long: { jp: '内容理解（長文）', en: 'Long passage', how: 'A longer essay. Track how the writer’s argument develops.' },
+    compare: { jp: '統合理解', en: 'Integrated comprehension', how: 'Two texts on the same topic. Compare what A and B think.' },
+    opinion: { jp: '主張理解（長文）', en: 'Thematic comprehension', how: 'An argumentative essay. Find what the writer really claims.' },
+    info: { jp: '情報検索', en: 'Information retrieval', how: 'A notice, schedule or price list. Scan for the details that match the conditions.' }
+  };
+  var ORDER = ['short', 'mid', 'long', 'compare', 'opinion', 'info'];
+
+  S.load(L, 'read', function (items) {
+    if (!items || !items.length) { main.innerHTML = '<div class="panel empty" style="margin-top:40px">' + L.toUpperCase() + ' reading is coming soon.</div>'; return; }
+    document.title = L.toUpperCase() + ' Reading | Nozomi';
+    if (I >= 1 && I <= items.length) passage(items, I - 1); else list(items);
+  });
+
+  function score(x) {
+    var n = 0, tried = 0;
+    x.questions.forEach(function (q, j) { var st = S.lrState(x.id + 'q' + j); if (st) { tried++; if (st.ok) n++; } });
+    return { right: n, tried: tried, total: x.questions.length };
+  }
+  function mark(x) {
+    var s = score(x);
+    if (!s.tried) return '<span class="lr-mark new">New</span>';
+    return '<span class="lr-mark ' + (s.right === s.total ? 'ok' : 'no') + '">' + s.right + ' / ' + s.total + '</span>';
+  }
+  function list(items) {
+    var first = items.findIndex(function (x) { return !score(x).tried; });
+    main.innerHTML = '<section class="page-head"><div class="deck-ic d-read" style="width:64px;height:64px;border-radius:16px">' + S.icon(S.SECTIONS.read.icon) + '</div>' +
+      '<div style="flex:1;min-width:220px"><h1>' + L.toUpperCase() + ' Reading <span class="jp muted" style="font-size:1.3rem">読解</span></h1>' +
+      '<p>' + items.length + ' passages · ' + items.reduce(function (n, x) { return n + x.questions.length; }, 0) + ' questions, the way the JLPT asks them. Tap any word for its meaning.</p></div>' +
+      '<a class="btn btn-primary" href="reading.html?l=' + L + '&i=' + ((first < 0 ? 0 : first) + 1) + '">' + (first < 0 ? 'Read again from 1' : first ? 'Continue · No. ' + (first + 1) : 'Start') + ' ' + S.icon(S.ICONS.arrow) + '</a></section>' +
+      ORDER.filter(function (t) { return items.some(function (x) { return x.type === t; }); }).map(function (t) {
+        var T = TYPES[t];
+        return '<h2 class="section-title"><span class="jp">' + T.jp + '</span> <small>' + T.en + ' — ' + T.how + '</small></h2><div class="lr-list">' +
+          items.map(function (x, i) {
+            if (x.type !== t) return '';
+            return '<a class="panel lr-row" href="reading.html?l=' + L + '&i=' + (i + 1) + '"><span class="lr-no">' + (i + 1) + '</span><span class="lr-title">' + S.esc(x.title) + '</span>' + mark(x) + '</a>';
+          }).join('') + '</div>';
+      }).join('');
+  }
+
+  function passage(items, idx) {
+    var x = items[idx], T = TYPES[x.type], picked = {}, furi = S.setting('furigana') !== false, showEn = false;
+    function allDone() { return Object.keys(picked).length === x.questions.length; }
+    function draw() {
+      document.body.classList.toggle('no-furi', !furi);
+      main.innerHTML = '<div class="study-head"><div class="deck-ic d-read">' + S.icon(S.SECTIONS.read.icon) + '</div>' +
+        '<div><h1>No. ' + (idx + 1) + ' <span class="muted" style="font-size:1rem;font-family:var(--s-f-ui)">of ' + items.length + '</span></h1>' +
+        '<div class="muted" style="font-size:.88rem">' + L.toUpperCase() + ' · <span class="jp">' + T.jp + '</span> · ' + T.en + '</div></div>' +
+        '<div class="set-nav">' + (idx > 0 ? '<a class="icon-btn" href="reading.html?l=' + L + '&i=' + idx + '" aria-label="Previous">' + S.icon(S.ICONS.left) + '</a>' : '') +
+        (idx < items.length - 1 ? '<a class="icon-btn" href="reading.html?l=' + L + '&i=' + (idx + 2) + '" aria-label="Next">' + S.icon(S.ICONS.right) + '</a>' : '') + '</div>' +
+        '<a class="btn btn-small" style="margin-left:auto" href="reading.html?l=' + L + '">All passages</a></div>' +
+        '<div class="ls-stage" style="margin:0 auto">' +
+          '<div class="rd-tools"><button class="toggle" type="button" id="furiT" aria-pressed="' + furi + '"><span class="sw"></span>Furigana</button>' +
+            S.speakBtn(S.plain(x.passage).split(/\n+/), 'Listen to the passage') + '<span class="muted" style="font-size:.85rem">' + T.how + '</span></div>' +
+          '<div class="panel rd-passage tap' + (x.type === 'info' ? ' info' : '') + '">' + S.ruby(x.passage) + '</div>' +
+          x.questions.map(function (q, j) {
+            var a = picked[j];
+            return '<div class="panel rd-q"><div class="qtext tap">問' + (j + 1) + '　' + S.ruby(q.q) + '</div><div class="options">' +
+              q.options.map(function (o, k) {
+                var cls = a === undefined ? '' : k === q.answer ? ' correct' : k === a ? ' wrong' : '';
+                return '<button class="opt jp' + cls + '" type="button" data-q="' + j + '" data-k="' + k + '"' + (a === undefined ? '' : ' disabled') + '><span class="muted" style="font-size:.8rem;margin-right:10px">' + (k + 1) + '</span>' + S.ruby(o) + '</button>';
+              }).join('') + '</div>' +
+              (a === undefined ? '' : '<div class="why">' + (a === q.answer ? '<b style="color:var(--s-matcha-text)">正解.</b> ' : '<b style="color:var(--s-shu-text)">The answer is ' + (q.answer + 1) + '.</b> ') + S.esc(q.explain || '') + '</div>') + '</div>';
+          }).join('') +
+          (allDone() ? '<div class="rd-tools"><button class="btn btn-small" type="button" id="enT">' + (showEn ? 'Hide translation' : 'Show translation') + '</button></div>' +
+            (showEn ? '<div class="panel rd-en">' + S.esc(x.en || '') + '</div>' : '') +
+            '<div class="ls-next">' + (idx < items.length - 1 ? '<a class="btn btn-primary" href="reading.html?l=' + L + '&i=' + (idx + 2) + '">Next passage ' + S.icon(S.ICONS.arrow) + '</a>' : '<a class="btn btn-primary" href="reading.html?l=' + L + '">Back to the list</a>') + '</div>' : '') +
+        '</div>';
+      document.getElementById('furiT').onclick = function () { furi = !furi; S.setting('furigana', furi); draw(); };
+      var e = document.getElementById('enT'); if (e) e.onclick = function () { showEn = !showEn; draw(); };
+      Array.prototype.forEach.call(document.querySelectorAll('.opt'), function (b) {
+        b.onclick = function () {
+          var j = +b.dataset.q, k = +b.dataset.k; if (picked[j] !== undefined) return;
+          picked[j] = k; S.recordLR(x.id + 'q' + j, k === x.questions[j].answer);
+          var y = window.scrollY; draw(); window.scrollTo(0, y);
+        };
+      });
+    }
+    draw();
+  }
+})();
+</script>
+</body>
+</html>

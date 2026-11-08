@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exam plan | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<style>
+.setup { padding: 18px 22px; display: flex; gap: 14px 22px; flex-wrap: wrap; align-items: center; }
+.setup label { display: flex; align-items: center; gap: 8px; font-size: .88rem; color: var(--s-ink-faint); }
+.setup select, .setup input[type=date] { font: 700 .92rem var(--s-f-ui); padding: 7px 10px; border-radius: 10px; border: 1px solid var(--s-line); background: var(--s-card); color: var(--s-ink); }
+.setup input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--s-ai); }
+.count { font: 800 3.2rem/1 var(--s-f-display); color: var(--s-shu); }
+.plan-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; align-items: start; }
+.todo { padding: 22px; display: grid; gap: 14px; }
+.todo-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.todo-head b { font: 700 1.15rem var(--s-f-display); }
+.task { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px dashed var(--s-line); }
+.task .t-title { font-weight: 700; }
+.task .t-sub { font-size: .82rem; color: var(--s-ink-faint); }
+.task .bar { margin-top: 6px; }
+.task .bar i { background: var(--c, var(--s-matcha)); }
+.task.done .t-title::after { content: " ✓"; color: var(--s-matcha-text); }
+.task .deck-ic.plain { background: var(--s-card2); color: var(--s-ink-soft); }
+.side { display: grid; gap: 18px; }
+.overall { padding: 22px; display: grid; gap: 12px; }
+.ov-row { display: grid; grid-template-columns: 90px 1fr 92px; gap: 10px; align-items: center; font-size: .85rem; }
+.ov-row .bar i { background: var(--c); }
+.ov-row span:last-child { text-align: right; color: var(--s-ink-faint); }
+.note { padding: 14px 18px; border-radius: 14px; font-size: .9rem; background: var(--s-card2); color: var(--s-ink-soft); }
+.note.warn { background: var(--s-shu-soft); color: var(--s-shu-text); }
+.note.ok { background: var(--s-matcha-soft); color: var(--s-matcha-text); }
+.roadmap { padding: 8px 22px; }
+.rm { display: grid; grid-template-columns: 130px 1fr; gap: 14px; padding: 14px 0; border-top: 1px dashed var(--s-line); }
+.rm:first-child { border-top: none; }
+.rm .when { font-weight: 700; font-size: .88rem; }
+.rm .when small { display: block; font-weight: 500; color: var(--s-ink-faint); }
+.rm .what { font-size: .92rem; color: var(--s-ink-soft); }
+.rm .what b { color: var(--s-ink); }
+.rm.now .when { color: var(--s-ai-deep); }
+.rm.rev .when { color: var(--s-fuji-text); }
+.rm.exam .when { color: var(--s-shu-text); }
+.tips { padding: 22px; display: grid; gap: 10px; }
+.tips p { margin: 0; color: var(--s-ink-soft); font-size: .92rem; }
+.tips b { color: var(--s-ink); }
+@media (max-width: 860px) { .plan-grid { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .rm { grid-template-columns: 1fr; gap: 4px; } .ov-row { grid-template-columns: 70px 1fr 80px; } .task { grid-template-columns: 36px 1fr; } .task .btn { grid-column: 2; justify-self: start; } }
+</style>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, M = SHIORI_MANIFEST, main = document.getElementById('main');
+  S.mount('plan');
+  var NOUN = { grammar: 'grammar points', kanji: 'kanji', vocab: 'words' }, ONE = { grammar: 'grammar point', kanji: 'kanji', vocab: 'word' };
+  // official pass marks (total / 180) — sections also each need 19+ points
+  var PASS = { n5: 80, n4: 90, n3: 95, n2: 90, n1: 100 };
+  var OUTSIDE = {
+    n5: 'Listen to slow Japanese for 10–15 min (beginner podcasts, anime with Japanese subtitles). Read hiragana/katakana aloud.',
+    n4: '15 min listening a day; read short texts (NHK News Web Easy, graded readers) and say them aloud.',
+    n3: '20 min listening + one short reading passage a day. Read for the gist first, then for details.',
+    n2: '25 min listening (news, podcasts at natural speed) + one 読解 passage a day, timed. Practise skimming long texts.',
+    n1: '30 min natural-speed listening (news, interviews, debates) + one long editorial or essay a day, timed.'
+  };
+  var PROVERBS = [['継続は力なり', 'keeping at it is what makes you strong'], ['千里の道も一歩から', 'a thousand-mile road starts with one step'],
+    ['塵も積もれば山となる', 'even dust, piled up, becomes a mountain'], ['七転び八起き', 'fall seven times, get up eight'],
+    ['石の上にも三年', 'three years on a cold stone warms it — patience pays'], ['習うより慣れろ', 'get used to it rather than just learning it'],
+    ['急がば回れ', 'if you’re in a hurry, take the sure road'], ['一日一歩', 'one step a day']];
+  var PROVERB = PROVERBS[Math.floor(Date.now() / 864e5) % PROVERBS.length];
+  function fmt(d) { return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+
+  function render() {
+    var P = S.examPlan(), L = P.level, t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    var lvSel = S.LEVELS.slice().reverse().map(function (l) { return '<option value="' + l + '"' + (l === L ? ' selected' : '') + '>' + l.toUpperCase() + '</option>'; }).join('');
+    var setup = '<section class="panel setup">' +
+      '<label>Exam level <select id="lv">' + lvSel + '</select></label>' +
+      '<label>Exam date <input type="date" id="dt" value="' + P.iso + '" min="' + S.isoDate(t0) + '"></label>' +
+      '<label><input type="checkbox" id="low"' + (P.lower ? ' checked' : '') + '> Also cover lower levels I haven’t finished</label>' +
+      (P.saved ? '' : '<span class="muted" style="font-size:.85rem">Defaulting to the next JLPT date — change it to match your exam.</span>') + '</section>';
+    var head = '<section class="page-head"><div class="badge-lv">' + L.toUpperCase() + '</div><div style="flex:1">' +
+      '<h1>試験まで · Exam plan</h1><p>' + (P.daysLeft > 0 ? fmt(P.date) + ' — your day-by-day plan to finish ' + P.levels.map(function (l) { return l.toUpperCase(); }).join(' + ') + ' in time.' : 'Pick your exam date to build a plan.') + '</p>' +
+      '<p class="proverb"><span class="jp">' + PROVERB[0] + '</span> — ' + PROVERB[1] + '</p></div>' +
+      (P.daysLeft > 0 ? '<div style="text-align:center"><div class="count">' + P.daysLeft + '</div><div class="muted" style="font-size:.85rem">day' + (P.daysLeft === 1 ? '' : 's') + ' left</div></div>' : '') + '</section>';
+
+    if (P.daysLeft <= 0) {
+      main.innerHTML = head + setup + '<div class="panel empty" style="margin-top:18px">' + (P.daysLeft === 0 ? '試験日 — today is exam day. Light review only, eat well, and 頑張って!' : 'That date has passed — set your next exam date above.') + '</div>';
+      return wire();
+    }
+
+    // ----- today -----
+    var tasks = '', DK, rows = P.decks.filter(function (r) { return r.total; }), next = S.nextTask(P);
+    function setLink(r) {
+      if (!r.next) return '';
+      var ss = r.sets.length ? r.sets : [r.next.s], lbl = ss.length > 1 ? 'Sets ' + ss[0] + '–' + ss[ss.length - 1] : 'Set ' + ss[0];
+      return '<a class="btn btn-small' + (r.todo ? ' btn-primary' : '') + '" href="study.html?l=' + r.next.l + '&d=' + r.deck + '&s=' + r.next.s + '&m=list">' + (r.todo ? lbl : 'More') + '</a>';
+    }
+    // reviews first: they're capped per day so they never bury the new material
+    tasks += '<div class="task' + (P.due ? '' : ' done') + '"><div class="deck-ic plain">' + S.icon('<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/>') + '</div><div>' +
+      '<div class="t-title">' + (P.due ? 'Review ' + P.due + ' card' + (P.due === 1 ? '' : 's') : P.revDone ? 'Reviews done (' + P.revDone + ')' : 'No reviews due') + '</div>' +
+      '<div class="t-sub">' + (P.due ? '≈ ' + Math.max(1, Math.round(P.due * P.perRev)) + ' min · ' : '') +
+        (P.dueAll > P.due ? (P.dueAll - P.due) + ' more wait for the next days (limit ' + S.game().revCap + '/day)' : 'Keeps what you learned from slipping') + '</div></div>' +
+      (P.due ? '<a class="btn btn-small btn-primary" href="review.html">Review</a>' : '') + '</div>';
+    if (P.phase === 'learn') rows.forEach(function (r) {
+      if (!r.target && !r.left) return;
+      DK = S.DECKS[r.deck];
+      var done = Math.min(r.today, r.target), pct = r.target ? done / r.target * 100 : 100;
+      tasks += '<div class="task d-' + r.deck + (r.todo ? '' : ' done') + '"><div class="deck-ic">' + S.icon(DK.icon) + '</div><div>' +
+        '<div class="t-title">' + (r.todo ? 'Master ' + r.todo + ' more ' + (r.todo === 1 ? ONE : NOUN)[r.deck] : r.target ? NOUN[r.deck].charAt(0).toUpperCase() + NOUN[r.deck].slice(1) + ' — target done' : 'All ' + NOUN[r.deck] + ' done') + '</div>' +
+        '<div class="t-sub">' + r.today + ' / ' + r.target + ' today' + (r.todo ? ' · ≈ ' + Math.max(1, Math.round(r.todo * r.per)) + ' min' : '') +
+          (r.extra ? ' · <b class="ahead">+' + r.extra + ' extra</b>' : '') +
+          (P.learn > 1 && r.left ? ' · tomorrow: ' + r.tomorrow : '') + (r.next && P.levels.length > 1 ? ' · now on ' + r.next.l.toUpperCase() : '') + '</div>' +
+        '<div class="bar"><i style="width:' + pct + '%"></i></div></div>' + setLink(r) + '</div>';
+    });
+    else tasks += '<div class="task"><div class="deck-ic plain">' + S.icon('<path d="M4 6h16M4 12h16M4 18h10"/>') + '</div><div><div class="t-title">Review phase — no new material</div>' +
+      '<div class="t-sub">' + (P.left ? P.left.toLocaleString() + ' items weren’t reached — skip them now and lock in what you know.' : 'Everything is learned. Now make it stick.') + '</div></div></div>' +
+      '<div class="task"><div class="deck-ic plain">' + S.icon('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11"/>') + '</div><div><div class="t-title">Quiz your weakest sets</div>' +
+      '<div class="t-sub">Re-take quizzes on sets where you scored under 80% — grammar first. Use “Review all” on each deck for a mixed quiz.</div></div>' +
+      '<a class="btn btn-small" href="study.html?l=' + L + '&d=grammar&s=all&m=quiz">Grammar quiz</a></div>';
+    tasks += '<div class="task"><div class="deck-ic plain">' + S.icon('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>') + '</div><div>' +
+      '<div class="t-title">Listening &amp; reading — one of each</div><div class="t-sub">Do one 聴解 and one 読解 question here, then: ' + OUTSIDE[L] + '</div></div>' +
+      '<span style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn btn-small" href="listening.html?l=' + L + '">聴解</a><a class="btn btn-small" href="reading.html?l=' + L + '">読解</a></span></div>';
+    var est = P.measured ? 'from your pace' : 'estimate — gets accurate as you study';
+    var today = '<div class="panel todo"><div class="todo-head"><b>今日 · Today’s plan</b><span class="muted" style="font-size:.85rem">' +
+      (P.done ? '<b class="ahead">Done for today ✓</b>' : '≈ <b style="color:var(--s-ink)">' + Math.max(1, P.minutesLeft) + ' min</b> left · ' + est) + '</span></div>' +
+      (next ? '<a class="btn btn-primary start-btn" href="' + next.href + '">' + (P.minutesLeft < P.minutes ? 'Continue' : 'Start') + ': ' + next.label + ' ' + S.icon(S.ICONS.arrow) + '</a>' : '') +
+      tasks + '</div>';
+
+    // ----- status: honest projection from the last 7 days, plus what doing extra buys you -----
+    var status = '';
+    if (P.phase === 'learn') {
+      if (P.done) status = '<div class="note ok"><b>今日の目標達成 — today’s plan is done.</b> Anything extra now lowers tomorrow’s targets' +
+        (rows.some(function (r) { return r.left; }) ? ' (tomorrow: ' + rows.filter(function (r) { return r.left; }).map(function (r) { return r.tomorrow + ' ' + NOUN[r.deck]; }).join(', ') + ')' : '') + '.</div>';
+      if (P.finish && P.early !== null) status += P.early >= 0
+        ? '<div class="note ok">At your pace (≈' + Math.round(P.rate) + ' items a day over the last week) you’ll finish everything by <b>' + fmt(P.finish) + '</b>' + (P.early > 0 ? ' — <b>' + P.early + ' day' + (P.early === 1 ? '' : 's') + ' early</b>' : '') + '. 順調です!</div>'
+        : '<div class="note warn">At your recent pace (≈' + Math.round(P.rate) + ' items a day) you’d finish on <b>' + fmt(P.finish) + '</b> — ' + (-P.early) + ' day' + (P.early === -1 ? '' : 's') + ' later than planned' + (P.finish >= P.date ? ', after the exam' : '') +
+          '. Hitting each day’s targets (≈' + Math.round(P.left / Math.max(1, P.learn)) + ' items a day) gets you back on track.</div>';
+      else if (!P.done) status += '<div class="note">Finish today’s tasks and this card shows when you’ll be done at your real pace.</div>';
+    }
+
+    // ----- overall + pace warning -----
+    var ov = '<div class="panel overall"><b style="font-family:var(--s-f-display)">Progress toward ' + P.levels.map(function (l) { return l.toUpperCase(); }).join(' + ') + '</b>' +
+      rows.map(function (r) {
+        return '<div class="ov-row d-' + r.deck + '"><span>' + S.DECKS[r.deck].name + '</span><div class="bar"><i style="width:' + (r.mastered / r.total * 100) + '%"></i></div><span>' + r.mastered.toLocaleString() + ' / ' + r.total.toLocaleString() + '</span></div>';
+      }).join('') +
+      '<div class="muted" style="font-size:.85rem">Learn everything by <b>' + fmt(P.learnBy) + '</b>, then ' + P.review + ' day' + (P.review === 1 ? '' : 's') + ' of pure review before the exam.</div></div>';
+    var note = status + (P.phase !== 'learn' ? '' : P.minutes > 120
+      ? '<div class="note warn"><b>Today’s plan is heavy (~' + P.minutes + ' min).</b> If you can’t keep it up, put grammar and vocabulary first — together they’re most of the 言語知識 score, and many kanji come along with the words. Kanji you don’t reach, learn as part of vocab.</div>'
+      : P.minutes > 60 ? '<div class="note warn">Solid but demanding — about ' + P.minutes + ' minutes today. Don’t skip days: missed work gets spread over the days that are left, so it piles up.</div>'
+      : '<div class="note ok">A comfortable pace — about ' + P.minutes + ' minutes today. Use spare time for extra listening and reading practice.</div>');
+
+    // ----- roadmap: weekly milestones, then the review days, then the exam -----
+    var rm = '', learnDays = P.learn, day = 0;
+    if (P.phase === 'learn') while (day < learnDays) {
+      var end = Math.min(day + 7, learnDays), from = addDays(t0, day), to = addDays(t0, end - 1);
+      rm += '<div class="rm' + (day === 0 ? ' now' : '') + '"><div class="when">' + (day === 0 ? 'This week' : 'Week ' + (day / 7 + 1)) + '<small>' + fmt(from) + (end - day > 1 ? ' – ' + fmt(to) : '') + '</small></div><div class="what">By the end: ' +
+        rows.map(function (r) {
+          var start = r.mastered - r.today, goal = Math.min(r.total, start + Math.ceil(r.startLeft / learnDays * end));
+          return '<b>' + goal.toLocaleString() + '</b> ' + NOUN[r.deck];
+        }).join(' · ') + ' mastered' + (day === 0 ? '.' : '. Keep clearing reviews every day.') + '</div></div>';
+      day = end;
+    }
+    var revStart = addDays(t0, Math.max(0, P.daysLeft - P.review));
+    for (var i = 0; i < P.review; i++) {
+      var d = addDays(revStart, i), last = i === P.review - 1, txt;
+      if (last) txt = '<b>Light review only.</b> Flip through grammar lists, check the venue, your admission voucher (受験票), pencils, eraser and a watch. Sleep early.';
+      else if (i === 0) txt = '<b>Full mock exam #1</b>, timed (official sample questions at jlpt.jp or a practice book). Mark which section was weakest.';
+      else if (i === Math.floor((P.review - 1) / 2) && P.review >= 5) txt = '<b>Full mock exam #2</b>, timed. Compare with mock #1 — are the weak sections improving?';
+      else txt = ['<b>Grammar:</b> re-quiz every grammar set under 80%; read each pattern’s examples aloud.',
+        '<b>Vocabulary:</b> quiz sets you studied first — they’re the most likely to have faded.',
+        '<b>Kanji:</b> reading quizzes on your weakest sets; focus on compounds.',
+        '<b>Reading &amp; listening:</b> one timed reading section and one listening section.'][i % 4];
+      rm += '<div class="rm rev' + (d.getTime() === t0.getTime() ? ' now' : '') + '"><div class="when">Review day ' + (i + 1) + '<small>' + fmt(d) + '</small></div><div class="what">' + txt + ' Clear all due reviews.</div></div>';
+    }
+    rm += '<div class="rm exam"><div class="when">試験日 · Exam<small>' + fmt(P.date) + '</small></div><div class="what">Pass mark for ' + L.toUpperCase() + ': <b>' + PASS[L] + ' / 180</b>, and at least 19 in every section — don’t neglect listening. Answer every question; there’s no penalty for guessing.</div></div>';
+
+    var tips = '<div class="panel tips"><b style="font-family:var(--s-f-display)">How to use this plan</b>' +
+      '<p><b>Just press Start.</b> It always takes you to the next thing: reviews first, then grammar → kanji → vocab.</p>' +
+      '<p><b>Already know some of it?</b> Use <b>Browse</b> (or “I know this whole set”) to mark items mastered — the plan counts them and today’s time drops.</p>' +
+      '<p><b>Ahead or behind?</b> Targets come from what’s actually left, so extra work today lowers every day after it, and a missed day only raises the rest a little.</p>' +
+      '<p><b>Times are measured.</b> After a few sessions the minutes come from how fast you really go, not a guess.</p></div>';
+
+    main.innerHTML = head + setup + '<h2 class="section-title">今日 <small>' + (P.phase === 'learn' ? 'Learning phase' : 'Review phase') + '</small></h2>' +
+      '<div class="plan-grid">' + today + '<div class="side">' + ov + note + '</div></div>' +
+      '<h2 class="section-title">道のり <small>Roadmap to exam day</small></h2><div class="panel roadmap">' + rm + '</div>' +
+      '<h2 class="section-title">心得 <small>Guidelines</small></h2>' + tips;
+    wire();
+  }
+  function wire() {
+    function save() {
+      var dt = document.getElementById('dt').value || S.isoDate(S.nextExam()), old = S.setting('exam') || {};
+      S.setting('exam', { level: document.getElementById('lv').value, date: dt, lower: document.getElementById('low').checked,
+        start: old.date === dt && old.start ? old.start : S.isoDate(new Date()) });
+      render();
+    }
+    ['lv', 'dt', 'low'].forEach(function (id) { document.getElementById(id).onchange = save; });
+  }
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mock test | Nozomi</title>
+<script>try{var t=localStorage.getItem('shiori_theme');document.documentElement.dataset.theme=t||'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="stylesheet" href="shiori.css">
+<script src="data/manifest.js"></script>
+<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="sync.js"></script>
+<script src="cards.js"></script>
+<script src="data/official.js"></script>
+<style>
+/* hub */
+.papers { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.paper { padding: 18px 20px; display: grid; gap: 8px; align-content: start; border-top: 4px solid var(--c, var(--s-shu)); transition: transform .15s ease, box-shadow .15s ease; }
+a.paper:hover { transform: translateY(-2px); box-shadow: var(--s-shadow-lift); }
+.paper b { font: 700 1.08rem var(--s-f-display); }
+.paper .src { font-size: .78rem; letter-spacing: .04em; color: var(--s-ink-faint); text-transform: uppercase; }
+.paper .st { font-size: .86rem; color: var(--s-ink-soft); }
+.paper.locked { opacity: .65; }
+.paper.official { --c: var(--s-ai); }
+/* runner */
+.ex-bar { position: sticky; top: 0; z-index: 6; display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; padding: 10px 16px; margin: 14px 0;
+  border-radius: 14px; background: color-mix(in srgb, var(--s-card) 94%, transparent); border: 1px solid var(--s-line); backdrop-filter: blur(6px); }
+.ex-bar b { font: 700 1rem var(--s-f-display); }
+.ex-bar .clock { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.05rem; }
+.ex-bar .clock.low { color: var(--s-shu-text); }
+.ex-wrap { display: grid; gap: 16px; }
+.ex-wrap.split { grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); align-items: start; }
+.ex-pdf { position: sticky; top: 76px; height: calc(100vh - 96px); min-height: 460px; border-radius: 16px; overflow: hidden; border: 1px solid var(--s-line); background: var(--s-card2); }
+.ex-pdf iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+.ex-card { padding: clamp(16px, 3vw, 24px); display: grid; gap: 14px; }
+.mondai { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; background: var(--s-card2); }
+.mondai b { font: 700 .98rem var(--s-f-display); }
+.mondai span { font: 500 .92rem/1.8 var(--s-f-display); color: var(--s-ink-soft); }
+.qno { display: inline-grid; place-items: center; min-width: 34px; height: 30px; padding: 0 8px; border: 1.5px solid var(--s-ink); border-radius: 6px; font: 700 .95rem var(--s-f-display); margin-right: 10px; }
+.qline { font: 500 1.12rem/2.1 var(--s-f-display); }
+.qline u, .ex-passage u { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1.5px; }
+.qline .slot { display: inline-block; min-width: 64px; border-bottom: 1.5px solid var(--s-ink); margin: 0 4px; text-align: center; }
+.qline .slot.star::after { content: "★"; font-size: .9rem; }
+.ex-passage .blank-cur { background: var(--s-kin-soft); color: var(--s-kin-text); border-radius: 4px; padding: 0 2px; }
+.headword { font: 700 1.5rem var(--s-f-display); }
+.ex-passage { padding: 14px 18px; border-radius: 12px; border: 1px solid var(--s-line); background: var(--s-card); font: 500 1.02rem/2.05 var(--s-f-display); white-space: pre-wrap; max-height: 46vh; overflow: auto; }
+.ex-passage.info { font-family: var(--s-f-ui); font-size: .95rem; line-height: 1.85; }
+.ex-opts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.ex-opts.long { grid-template-columns: 1fr; }
+.ex-opts .opt { min-height: 50px; padding: 10px 16px; }
+.ex-opts .opt.picked { border-color: var(--s-ai); background: var(--s-ai-soft); box-shadow: 0 0 0 2px var(--s-ai-soft); }
+.ex-nav { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.grid-q { display: flex; flex-wrap: wrap; gap: 6px; }
+.grid-q button { width: 38px; height: 34px; border-radius: 8px; border: 1px solid var(--s-line); background: var(--s-card); font: 700 .8rem var(--s-f-ui); color: var(--s-ink-soft); cursor: pointer; }
+.grid-q button.done { background: var(--s-ai-soft); color: var(--s-ai-deep); border-color: var(--s-ai-soft); }
+.grid-q button.cur { outline: 2px solid var(--s-ai); outline-offset: 1px; }
+.grid-q .gm { width: 100%; font-size: .75rem; color: var(--s-ink-faint); margin-top: 4px; }
+.ex-audio { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--s-fuji-soft); }
+.ex-audio audio { width: 100%; }
+.ex-play { justify-self: start; }
+.sheet-opts { display: flex; gap: 12px; flex-wrap: wrap; }
+.sheet-opts .opt { width: 64px; height: 64px; min-height: 0; padding: 0; border-radius: 50%; display: grid; place-items: center; font: 800 1.3rem var(--s-f-display); }
+/* results */
+.t-score { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.t-score > div { padding: 16px; text-align: center; }
+.t-score b { display: block; font: 800 1.8rem var(--s-f-display); }
+.t-score span { font-size: .82rem; color: var(--s-ink-faint); }
+.rv { padding: 14px 18px; display: grid; gap: 8px; border-left: 4px solid var(--s-matcha); }
+.rv.bad { border-left-color: var(--s-shu); }
+.rv .why { font-size: .86rem; color: var(--s-ink-soft); }
+.rv .ans { font-size: .88rem; }
+@media (max-width: 960px) { .ex-wrap.split { grid-template-columns: 1fr; } .ex-pdf { position: relative; top: 0; height: 70vh; } }
+</style>
+</head>
+<body>
+<div id="top"></div>
+<main class="wrap" id="main"><div class="empty">Loading…</div></main>
+<div id="foot"></div>
+
+<script>
+(function () {
+  var S = Shiori, C = ShioriCards, L = S.params().level, main = document.getElementById('main');
+  var P = new URLSearchParams(location.search).get('p');
+  S.mount(L, L, 'test');
+  document.title = L.toUpperCase() + ' Mock test | Nozomi';
+
+  /* ---------- the real exam's shape ---------- */
+  // section times (minutes) printed on the official workbook papers — these papers (and Nozomi's, built to the same
+  // composition) have that many questions; today's exam is a little shorter (e.g. N5 20/40/30)
+  var TIMES = { n5: [25, 50, 30], n4: [30, 60, 35], n3: [30, 70, 40], n2: [105, 50], n1: [110, 60] }[L];
+  var JOINT = L === 'n1' || L === 'n2';                 // N1/N2: vocabulary, grammar and reading are one section
+  var PASS = { n5: 80, n4: 90, n3: 95, n2: 90, n1: 100 }[L], SPLIT = L === 'n5' || L === 'n4';
+  // listening 問題 types in paper order (decides 3 or 4 answer choices on the official answer sheet)
+  var LTYPES = SPLIT ? ['task', 'point', 'utterance', 'response'] : L === 'n3' ? ['task', 'point', 'gist', 'utterance', 'response'] : ['task', 'point', 'gist', 'response', 'integrated'];
+  // which official PDF a vocabulary/grammar/reading 問題 is printed in
+  function pdfPart(sec, mondai) {
+    if (sec === 'moji') return 'V';
+    if (L === 'n1') return mondai <= 4 ? 'V' : mondai <= 7 ? 'G' : 'R';
+    if (L === 'n2') return mondai <= 6 ? 'V' : mondai <= 9 ? 'G' : 'R';
+    return mondai <= 3 ? 'G' : 'R';
+  }
+  function category(sec, mondai) {                       // for scoring: language knowledge, reading, listening
+    if (sec === 'listen') return 'listen';
+    return pdfPart(sec, mondai) === 'R' ? 'read' : 'lk';
+  }
+  var PAPERS = [
+    { id: '1', kind: 'official', year: 2018, title: 'Official practice paper', src: 'JLPT · 2018 workbook Vol. 2' },
+    { id: '2', kind: 'official', year: 2012, title: 'Official practice paper', src: 'JLPT · 2012 workbook' },
+    { id: '3', kind: 'nozomi', n: 1, title: 'Nozomi mock paper 1', src: 'Nozomi · full paper' },
+    { id: '4', kind: 'nozomi', n: 2, title: 'Nozomi mock paper 2', src: 'Nozomi · full paper' },
+    { id: '5', kind: 'nozomi', n: 3, title: 'Nozomi mock paper 3', src: 'Nozomi · full paper' }
+  ];
+  function jlptUrl(year, file) { return 'https://www.jlpt.jp/samples/sample' + year + '/' + file; }
+  function mp3(year, mondai) {                            // the 2012 set serves 問題2 from the 2017 folder
+    return 'https://www.jlpt.jp/samples/sample' + (year === 2012 && mondai === 2 ? 2017 : year) + '/mp3/' + L.toUpperCase() + 'Q' + mondai + '.mp3';
+  }
+
+  var results = S.testHistory(L);
+  function best(id) { var r = results.filter(function (x) { return x.paper === id; }); return r.length ? r.reduce(function (a, b) { return b.total > a.total ? b : a; }) : null; }
+  function unlocked() { return PAPERS.every(function (x) { return best(x.id); }); }
+  if (!P || (P === 'x' && !unlocked())) return hub();
+  var paperDef = PAPERS.filter(function (x) { return x.id === P; })[0];
+  if (P !== 'x' && !paperDef) return hub();
+  loadPaper(function (paper) {
+    if (!paper) { main.innerHTML = '<div class="panel empty" style="margin-top:40px">This paper isn’t ready yet. <a href="test.html?l=' + L + '">Back to the papers</a></div>'; return; }
+    intro(paper);
+  });
+
+  /* ---------- hub: five fixed papers, then unlimited practice ---------- */
+  function hub() {
+    var done = PAPERS.filter(function (x) { return best(x.id); }).length;
+    main.innerHTML = '<section class="page-head"><div class="deck-ic d-test" style="width:64px;height:64px;border-radius:16px">' + S.icon(S.SECTIONS.test.icon) + '</div>' +
+      '<div style="flex:1;min-width:220px"><h1>' + L.toUpperCase() + ' Mock tests <span class="jp muted" style="font-size:1.3rem">模擬試験</span></h1>' +
+      '<p>Full papers in the real format, timed like the exam: ' + (JOINT ? '言語知識・読解 ' + TIMES[0] + ' min, 聴解 ' + TIMES[1] + ' min' : '文字・語彙 ' + TIMES[0] + ' min, 文法・読解 ' + TIMES[1] + ' min, 聴解 ' + TIMES[2] + ' min') +
+      '. One question at a time — go back and change answers any time within a section.</p></div></section>' +
+      '<div class="papers">' + PAPERS.map(function (x) {
+        var b = best(x.id);
+        return '<a class="panel paper' + (x.kind === 'official' ? ' official' : '') + '" href="test.html?l=' + L + '&p=' + x.id + '"><span class="src">' + x.src + '</span><b>Paper ' + x.id + ' · ' + x.title + '</b>' +
+          '<span class="st">' + (b ? 'Best: <b style="font-size:inherit">' + b.total + ' / 180</b> · ' + (b.pass ? '<span style="color:var(--s-matcha-text)">pass level</span>' : '<span style="color:var(--s-shu-text)">below pass</span>') : 'Not taken yet') + '</span>' +
+          '<span class="muted" style="font-size:.82rem">' + (x.kind === 'official' ? 'The official question paper and audio from jlpt.jp, with Nozomi’s timer and answer sheet.' : 'An original paper with every JLPT question type, answers explained afterwards.') + '</span></a>';
+      }).join('') +
+      (unlocked()
+        ? '<a class="panel paper" href="test.html?l=' + L + '&p=x" style="--c:var(--s-matcha)"><span class="src">Unlimited</span><b>Practice paper</b><span class="st">New questions every time, from Nozomi’s own banks.</span></a>'
+        : '<div class="panel paper locked" style="--c:var(--s-line)"><span class="src">Locked · ' + done + ' / 5 papers done</span><b>Unlimited practice papers</b><span class="st">Finish all five papers to unlock endless practice papers.</span></div>') +
+      '</div>' +
+      (results.length ? '<h2 class="section-title">Your results</h2><div class="panel" style="padding:14px 18px;display:grid;gap:6px;font-size:.9rem">' + results.slice(0, 12).map(function (h) {
+        return '<div>' + new Date(h.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' · ' + (h.paper === 'x' ? 'Practice paper' : h.paper ? 'Paper ' + h.paper : 'Practice paper') + ' — <b>' + h.total + ' / 180</b> · ' + h.parts + '</div>';
+      }).join('') + '</div>' : '') +
+      '<p class="muted" style="font-size:.82rem;margin-top:18px">Official papers: © The Japan Foundation / Japan Educational Exchanges and Services, shown directly from jlpt.jp. Nozomi stores only your answers.</p>';
+  }
+
+  /* ---------- building a paper: sections → 問題 → questions ---------- */
+  function loadPaper(cb) {
+    if (P === 'x') return loadBanks(function () { cb(genPaper()); });
+    if (paperDef.kind === 'official') {
+      var key = (window.SHIORI_OFFICIAL || {})[L + '_' + paperDef.year];
+      return cb(key ? officialPaper(key, paperDef.year) : null);
+    }
+    S.load(L, 'p' + P, function (d) { cb(d && d.lk ? nozomiPaper(d) : null); });
+  }
+  function sectionsShell() {
+    return JOINT
+      ? [{ key: 'lkr', jp: '言語知識（文字・語彙・文法）・読解', minutes: TIMES[0], parts: [] }, { key: 'listen', jp: '聴解', minutes: TIMES[1], parts: [] }]
+      : [{ key: 'moji', jp: '言語知識（文字・語彙）', minutes: TIMES[0], parts: [] }, { key: 'bunpo', jp: '言語知識（文法）・読解', minutes: TIMES[1], parts: [] }, { key: 'listen', jp: '聴解', minutes: TIMES[2], parts: [] }];
+  }
+  function secFor(secs, sec) { return sec === 'listen' ? secs[secs.length - 1] : JOINT ? secs[0] : sec === 'moji' ? secs[0] : secs[1]; }
+
+  // official paper: the questions are on jlpt.jp; Nozomi has the answer key only
+  function officialPaper(key, year) {
+    var secs = sectionsShell();
+    key.forEach(function (m) {
+      var s = secFor(secs, m.sec), isL = m.sec === 'listen', type = isL ? LTYPES[m.mondai - 1] : null;
+      var nOpt = isL && (type === 'utterance' || type === 'response') ? 3 : 4, part = isL ? 'L' : pdfPart(m.sec, m.mondai);
+      s.parts.push({ mondai: m.mondai, official: true, pdf: jlptUrl(year, 'pdf/' + L.toUpperCase() + part + '.pdf'), audio: isL ? mp3(year, m.mondai) : null,
+        questions: m.qs.map(function (q) {
+          return { label: String(q[0]).replace(/^(\d+)-(\d)$/, '$1 (質問$2)'), options: Array.from({ length: nOpt }, function (_, i) { return String(i + 1); }), answer: q[1] - 1, cat: category(m.sec, m.mondai) };
+        }) });
+    });
+    return { title: 'Paper ' + P + ' · JLPT official practice paper (' + year + ')', official: true, year: year, sections: secs };
+  }
+
+  // Nozomi paper from data/<level>_p<k>.js  { lk: { mondai: [...] }, l: { mondai: [...] } }
+  function nozomiPaper(d) {
+    var secs = sectionsShell(), num = {};
+    function next(s) { num[s.key] = (num[s.key] || 0) + 1; return num[s.key]; }
+    d.lk.mondai.forEach(function (m) {
+      var sk = m.sec === 'moji' ? 'moji' : 'bunpo', s = secFor(secs, sk), qs = [];
+      if (m.passages) m.passages.forEach(function (ps) {
+        ps.questions.forEach(function (q) {
+          qs.push({ label: String(next(s)), kind: m.type, passage: ps.text, info: m.type === 'info', q: m.type === 'text_grammar' ? '' : q.q, options: q.options, answer: q.answer, explain: q.explain, cat: category(sk, m.no) });
+        });
+      });
+      else m.items.forEach(function (q) {
+        qs.push({ label: String(next(s)), kind: m.type, q: q.q, word: q.word, options: q.options, answer: q.answer, explain: q.explain, cat: category(sk, m.no) });
+      });
+      s.parts.push({ mondai: m.no, instr: m.instr, questions: qs });
+    });
+    var ls = secs[secs.length - 1];
+    d.l.mondai.forEach(function (m) {
+      var qs = [], k = 0;
+      m.items.forEach(function (it) {
+        k++;
+        if (it.subq) it.subq.forEach(function (sq, j) { qs.push({ label: k + ' (質問' + (j + 1) + ')', kind: 'listen', ltype: m.type, item: it, q: sq.question, options: sq.options, answer: sq.answer, explain: sq.explain, printed: true, cat: 'listen' }); });
+        else qs.push({ label: String(k), kind: 'listen', ltype: m.type, item: it, q: '', options: it.options, answer: it.answer, explain: it.explain, printed: m.type === 'task' || m.type === 'point', cat: 'listen' });
+      });
+      ls.parts.push({ mondai: m.no, instr: m.instr, questions: qs });
+    });
+    return { title: 'Paper ' + P + ' · ' + paperDef.title, sections: secs };
+  }
+
+  /* unlimited practice: generated from the site's own data, in the same runner */
+  var data = {};
+  function loadBanks(cb) {
+    var need = ['vocab', 'kanji', 'grammar', 'gquiz', 'read', 'listen'], left = need.length;
+    need.forEach(function (n) { S.load(L, n, function (x) { data[n] = x || []; if (!--left) lower(); }); });
+    function lower() {
+      var lv = S.LEVELS.slice(0, S.LEVELS.indexOf(L)), n = lv.length; data.allKanji = data.kanji.slice();
+      if (!n) return dict();
+      lv.forEach(function (l) { S.load(l, 'kanji', function (x) { data.allKanji = data.allKanji.concat(x || []); if (!--n) dict(); }); });
+    }
+    function dict() { if (window.SHIORI_DICT) return cb(); var el = document.createElement('script'); el.src = 'data/dict.js'; el.onload = el.onerror = cb; document.head.appendChild(el); }
+  }
+  var VOICED = { か: 'が', き: 'ぎ', く: 'ぐ', け: 'げ', こ: 'ご', さ: 'ざ', し: 'じ', す: 'ず', せ: 'ぜ', そ: 'ぞ', た: 'だ', ち: 'ぢ', つ: 'づ', て: 'で', と: 'ど', は: 'ば', ひ: 'び', ふ: 'ぶ', へ: 'べ', ほ: 'ぼ' };
+  var KJ = /^[㐀-鿿々]+$/;
+  function hira(x) { return x.replace(/[ァ-ヶ]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0x60); }); }
+  function firstR(v) { return String(v.r || '').split(/[;；,、]/)[0].trim(); }
+  function readsOf(ch, info) {
+    var k = info[ch], o = {}; if (!k) return [];
+    k.on.forEach(function (x) { o[hira(x)] = 1; });
+    k.kun.forEach(function (x) { var st = x.replace(/\(.*\)/, ''); if (st.length > 1 || x === st) o[st] = 1; });
+    return Object.keys(o).filter(Boolean);
+  }
+  function forms(x) {
+    var o = [x]; if (VOICED[x[0]]) o.push(VOICED[x[0]] + x.slice(1));
+    if ('はひふへほ'.indexOf(x[0]) >= 0) o.push(String.fromCharCode(x.charCodeAt(0) + 2) + x.slice(1));
+    if (/[つちくき]$/.test(x)) o.push(x.slice(0, -1) + 'っ');
+    return o;
+  }
+  function kanjiFakes(w, r, info) {                       // 名前 → めいぜん: another real reading of one of the kanji
+    if (w.length !== 2) return [];
+    var A = readsOf(w[0], info), B = readsOf(w[1], info);
+    for (var i = 1; i < r.length; i++) {
+      var r1 = r.slice(0, i), r2 = r.slice(i);
+      var a = A.filter(function (x) { return forms(x).indexOf(r1) >= 0; }), b = B.filter(function (x) { return forms(x).indexOf(r2) >= 0; });
+      if (!a.length || !b.length) continue;
+      var out = {};
+      A.forEach(function (x) { if (a.indexOf(x) < 0) out[x + r2] = 1; });
+      B.forEach(function (x) { if (b.indexOf(x) < 0) out[r1 + x] = 1; });
+      return Object.keys(out).filter(function (x) { return x !== r && x.length >= 2 && x.length <= r.length + 2 && !/っ[あ-おな-のま-もや-よら-ろわをんっ]|^っ/.test(x); });
+    }
+    return [];
+  }
+  function pick(list, n) { return C.shuffle(list).slice(0, n); }
+  function genPaper() {
+    var secs = sectionsShell(), V = data.vocab, info = {}, num = {};
+    data.allKanji.forEach(function (k) { info[k.k] = k; });
+    function next(s) { num[s.key] = (num[s.key] || 0) + 1; return String(num[s.key]); }
+    var lk1 = secFor(secs, 'moji'), lk2 = secFor(secs, 'bunpo'), yomi = [], hyoki = [], words = {}, byOn = {};
+    pick(V.filter(function (v) { var w = String(v.w).split(/[;；]/)[0]; return !v.f && v.r && KJ.test(w) && w.length >= 2 && firstR(v).length >= 3; }), JOINT ? 6 : 8).forEach(function (v) {
+      var q = C.Q.vocab(v, V), w = String(v.w).split(/[;；]/)[0], r = firstR(v);
+      var wrong = C.shuffle(kanjiFakes(w, r, info)).slice(0, 2).map(S.esc);
+      q.opts.filter(function (o) { return !o.ok; }).forEach(function (o) { if (wrong.length < 3 && wrong.indexOf(o.html) < 0) wrong.push(o.html); });
+      var opts = C.shuffle([S.esc(r)].concat(wrong.slice(0, 3)));
+      yomi.push({ label: next(lk1), kind: 'kanji_reading', qhtml: '<u>' + S.esc(w) + '</u>', options: opts, answer: opts.indexOf(S.esc(r)), explain: S.esc(w) + ' — ' + S.esc(r) + ' · ' + S.esc(v.m), cat: 'lk', html: true });
+    });
+    lk1.parts.push({ mondai: 1, instr: '＿＿の ことばは ひらがなで どう かきますか。', questions: yomi });
+    if (L !== 'n1') {
+      data.allKanji.forEach(function (k) { k.on.forEach(function (o) { (byOn[o] = byOn[o] || []).push(k.k); }); });
+      V.forEach(function (v) { words[String(v.w).split(/[;；]/)[0]] = 1; });
+      (window.SHIORI_DICT || []).forEach(function (e) { words[e[0]] = 1; });   // a "wrong" spelling must not be a real word
+      C.shuffle(V.filter(function (v) { var w = String(v.w).split(/[;；]/)[0]; return !v.f && v.r && KJ.test(w) && w.length >= 2; })).some(function (v) {
+        if (hyoki.length >= 6) return true;
+        var w = String(v.w).split(/[;；]/)[0], fakes = {};
+        Array.from(w).forEach(function (ch, i) { ((info[ch] && info[ch].on) || []).forEach(function (o) { (byOn[o] || []).forEach(function (alt) { if (alt !== ch) { var f = w.slice(0, i) + alt + w.slice(i + 1); if (!words[f]) fakes[f] = 1; } }); }); });
+        var f = C.shuffle(Object.keys(fakes)).slice(0, 3);
+        if (f.length < 3 || yomi.some(function (q) { return q.qhtml.indexOf(w) >= 0; })) return false;
+        var opts = C.shuffle([w].concat(f)).map(S.esc);
+        hyoki.push({ label: next(lk1), kind: 'orthography', qhtml: '<u>' + S.esc(firstR(v)) + '</u>', options: opts, answer: opts.indexOf(S.esc(w)), explain: S.esc(w) + ' — ' + S.esc(v.m), cat: 'lk', html: true });
+        return false;
+      });
+      lk1.parts.push({ mondai: 2, instr: '＿＿の ことばは どう かきますか。', questions: hyoki });
+    }
+    var gq = pick(data.grammar.filter(function (g) { return data.gquiz[g.id]; }), JOINT ? 10 : 13).map(function (g, i) {
+      var q = C.Q.grammar(g, data.grammar, i, data.gquiz);
+      return { label: next(lk2), kind: 'grammar_form', qhtml: q.prompt, options: q.opts.map(function (o) { return o.html; }), answer: q.opts.findIndex(function (o) { return o.ok; }), explain: q.reveal, cat: 'lk', html: true };
+    });
+    lk2.parts.push({ mondai: JOINT ? 5 : 1, instr: '（　　）に 何を 入れますか。', questions: gq });
+    var PLAN = { n5: { short: 2, mid: 1, info: 1 }, n4: { short: 2, mid: 1, info: 1 }, n3: { short: 2, mid: 1, long: 1, info: 1 }, n2: { short: 2, mid: 1, compare: 1, opinion: 1, info: 1 }, n1: { short: 1, mid: 1, long: 1, compare: 1, opinion: 1, info: 1 } }[L];
+    var rq = [];
+    Object.keys(PLAN).forEach(function (t) {
+      pick(data.read.filter(function (x) { return x.type === t; }), PLAN[t]).forEach(function (x) {
+        x.questions.forEach(function (q) { rq.push({ label: next(lk2), kind: t, passage: x.passage, info: t === 'info', q: q.q, options: q.options, answer: q.answer, explain: q.explain, cat: 'read' }); });
+      });
+    });
+    lk2.parts.push({ mondai: JOINT ? 8 : 4, instr: 'つぎの文章を読んで、質問に答えてください。', questions: rq });
+    var ls = secs[secs.length - 1], LP = SPLIT ? { task: 3, point: 3, utterance: 2, response: 3 } : L === 'n3' ? { task: 2, point: 2, gist: 2, utterance: 2, response: 3 } : { task: 2, point: 2, gist: 2, response: 4, integrated: 1 };
+    Object.keys(LP).forEach(function (t, mi) {
+      var k = 0, qs = pick(data.listen.filter(function (x) { return x.type === t; }), LP[t]).map(function (it) {
+        k++; return { label: String(k), kind: 'listen', ltype: t, item: it, q: '', options: it.options, answer: it.answer, explain: it.explain, printed: t === 'task' || t === 'point' || t === 'integrated', cat: 'listen' };
+      });
+      if (qs.length) ls.parts.push({ mondai: mi + 1, instr: '', questions: qs });
+    });
+    secs.forEach(function (s) { s.parts = s.parts.filter(function (p) { return p.questions.length; }); });
+    return { title: 'Practice paper', sections: secs };
+  }
+
+  /* ---------- intro ---------- */
+  function intro(paper) {
+    var total = 0; paper.sections.forEach(function (s) { s.parts.forEach(function (p) { total += p.questions.length; }); });
+    main.innerHTML = '<section class="page-head"><div class="deck-ic d-test" style="width:64px;height:64px;border-radius:16px">' + S.icon(S.SECTIONS.test.icon) + '</div>' +
+      '<div style="flex:1;min-width:220px"><h1>' + S.esc(paper.title) + '</h1><p>' + total + ' questions · ' + paper.sections.map(function (s) { return '<span class="jp">' + s.jp + '</span> ' + s.minutes + ' min'; }).join(' · ') + '</p></div></section>' +
+      '<div class="panel ex-card"><b style="font-family:var(--s-f-display)">How it works</b>' +
+        '<p style="margin:0;color:var(--s-ink-soft)">Each section has its own clock, like the real exam. Answer one question at a time — Back, Next, or jump with the number grid. ' +
+        'When you finish a section (or its time runs out) you move on and can’t go back to it. ' + (paper.official
+          ? 'The question paper opens beside the answer sheet, straight from jlpt.jp; listening parts play the official recording. On a phone, open the paper in a new tab if it doesn’t show.'
+          : 'Furigana appears only on kanji above ' + L.toUpperCase() + ', as on the real paper. Each listening question plays once.') + '</p>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" type="button" id="go">Start · <span class="jp">' + paper.sections[0].jp + '</span> ' + S.icon(S.ICONS.arrow) + '</button><a class="btn" href="test.html?l=' + L + '">All papers</a></div></div>';
+    document.getElementById('go').onclick = function () { run(paper); };
+  }
+
+  /* ---------- runner ---------- */
+  function run(paper) {
+    var si = 0, flat, qi, ans = {}, played = {}, t0, timer, showPdf = true;
+    window.onbeforeunload = function () { return 'Leave the test? Your answers will be lost.'; };
+    function startSection() {
+      flat = []; paper.sections[si].parts.forEach(function (p) { p.questions.forEach(function (q) { q.part = p; flat.push(q); }); });
+      qi = 0; t0 = Date.now(); clearInterval(timer); timer = setInterval(tick, 1000); draw();
+    }
+    function key(q) { return si + ':' + flat.indexOf(q); }
+    function left() { return paper.sections[si].minutes * 60 - (Date.now() - t0) / 1000; }
+    function tick() {
+      var s = left(), el = document.getElementById('clock'); if (!el) return;
+      if (s <= 0) { el.textContent = '0:00'; finishSection(true); return; }
+      el.textContent = Math.floor(s / 60) + ':' + ('0' + Math.floor(s % 60)).slice(-2) + ' left';
+      el.classList.toggle('low', s < 300);
+    }
+    function itemKey(x) { return x.intro + '|' + x.lines.length + '|' + ((x.lines[0] || {}).ja || ''); }
+    function draw() {
+      var sec = paper.sections[si], q = flat[qi], part = q.part, k = key(q), a = ans[k];
+      var grid = sec.parts.map(function (p) {
+        return '<span class="gm jp">問題' + p.mondai + '</span>' + p.questions.map(function (x) {
+          var i = flat.indexOf(x); return '<button type="button" data-go="' + i + '" class="' + (ans[key(x)] !== undefined ? 'done' : '') + (i === qi ? ' cur' : '') + '">' + S.esc(x.label.replace(/ \(質問(\d)\)/, '-$1')) + '</button>';
+        }).join('');
+      }).join('');
+      var card = '<div class="panel ex-card">' +
+        '<div class="mondai"><b class="jp">問題' + part.mondai + '</b>' + (part.instr ? '<span class="jp">' + S.ruby(part.instr) + '</span>' : '') + '</div>' +
+        (part.audio ? '<div class="ex-audio"><span class="muted" style="font-size:.85rem">Official recording for 問題' + part.mondai + ' — the instructions, an example, then each question in order.</span><audio controls preload="none" src="' + part.audio + '"></audio></div>' : '') +
+        questionHtml(q) +
+        '<div class="ex-opts' + (part.official ? ' sheet-opts' : long(q) ? ' long' : '') + '">' + q.options.map(function (o, i) {
+          return '<button class="opt jp' + (a === i ? ' picked' : '') + '" type="button" data-i="' + i + '">' + (part.official ? (i + 1) : '<span class="muted" style="font-size:.8rem;margin-right:10px">' + (i + 1) + '</span>' + (q.kind === 'listen' && !q.printed ? '' : opt(o, q))) + '</button>';
+        }).join('') + '</div>' +
+        '<div class="ex-nav"><button class="btn" type="button" id="back"' + (qi ? '' : ' disabled') + '>' + S.icon(S.ICONS.left) + 'Back</button>' +
+          '<span class="muted" style="font-size:.85rem">' + (qi + 1) + ' / ' + flat.length + '</span>' +
+          (qi < flat.length - 1 ? '<button class="btn btn-primary" type="button" id="next">Next ' + S.icon(S.ICONS.arrow) + '</button>' : '<button class="btn btn-primary" type="button" id="end">Finish section</button>') + '</div>' +
+        '<div class="grid-q">' + grid + '</div></div>';
+      var keepAudio = document.querySelector('.ex-audio audio'), playingSrc = keepAudio && !keepAudio.paused ? keepAudio.getAttribute('src') : null;
+      if (playingSrc && playingSrc === part.audio) {             // same recording still playing: only redraw the card's answers, keep the audio
+        var host = document.querySelector('.ex-card');
+        var tmp = document.createElement('div'); tmp.innerHTML = card; var fresh = tmp.firstChild;
+        fresh.replaceChild(keepAudio.parentNode, fresh.querySelector('.ex-audio'));
+        host.parentNode.replaceChild(fresh, host);
+      } else {
+        main.innerHTML = '<div class="ex-bar"><b class="jp">' + sec.jp + '</b><span class="muted" style="font-size:.85rem">Section ' + (si + 1) + ' of ' + paper.sections.length + '</span>' +
+          (part.official ? '<button class="btn btn-small" type="button" id="pdfT">' + (showPdf ? 'Hide paper' : 'Show paper') + '</button><a class="btn btn-small" target="_blank" rel="noopener" href="' + part.pdf + '">Open paper in a new tab</a>' : '') +
+          '<span class="clock" id="clock"></span></div>' +
+          '<div class="ex-wrap' + (part.official && showPdf ? ' split' : '') + '">' + (part.official && showPdf ? '<div class="ex-pdf"><iframe title="JLPT question paper" src="' + part.pdf + '#view=FitH"></iframe></div>' : '') + card + '</div>';
+      }
+      var cur = document.querySelector('.ex-passage .blank-cur'), box = cur && cur.closest('.ex-passage');
+      if (cur) box.scrollTop = Math.max(0, cur.offsetTop - box.offsetTop - box.clientHeight / 2);
+      var frame = document.querySelector('.ex-pdf iframe');
+      if (frame && frame.getAttribute('src').split('#')[0] !== part.pdf) frame.setAttribute('src', part.pdf + '#view=FitH');
+      tick();
+      Array.prototype.forEach.call(main.querySelectorAll('.ex-opts .opt'), function (b) { b.onclick = function () { ans[k] = +b.dataset.i; draw(); }; });
+      Array.prototype.forEach.call(main.querySelectorAll('[data-go]'), function (b) { b.onclick = function () { qi = +b.dataset.go; draw(); }; });
+      var bk = document.getElementById('back'); if (bk) bk.onclick = function () { qi--; draw(); };
+      var nx = document.getElementById('next'); if (nx) nx.onclick = function () { qi++; draw(); };
+      var en = document.getElementById('end'); if (en) en.onclick = function () { confirmEnd(en); };
+      var pt = document.getElementById('pdfT'); if (pt) pt.onclick = function () { showPdf = !showPdf; main.innerHTML = ''; draw(); };
+      var pl = document.getElementById('lplay'); if (pl) pl.onclick = function () { playOnce(q, pl); };
+    }
+    function long(q) { return q.kind === 'usage' || q.kind === 'paraphrase' || q.options.some(function (o) { return S.plain(o).length > 14; }); }
+    function opt(o, q) { return q.html ? o : S.ruby(o); }
+    function underline(t) { return S.ruby(t).replace(/\[\[([\s\S]*?)\]\]/g, '<u>$1</u>'); }
+    function sentence(t) { return underline(t).replace(/＿★＿/g, '<span class="slot star"></span>').replace(/＿＿＿/g, '<span class="slot"></span>'); }
+    function questionHtml(q) {
+      if (q.part.official) return '<div class="qline"><span class="qno">' + S.esc(q.label) + '</span><span class="muted" style="font-size:.95rem">Answer question ' + S.esc(q.label) + ' from the ' + (q.part.audio ? 'recording and paper' : 'paper') + '.</span></div>';
+      var n = '<span class="qno">' + S.esc(q.label) + '</span>';
+      if (q.kind === 'listen') {
+        var pk = q.item, done = played[itemKey(pk)];
+        return (q.ltype === 'utterance' && pk.intro ? '<div class="ex-passage jp">' + S.ruby(pk.intro) + '</div>' : '') +
+          '<div class="qline">' + n + (q.q ? S.ruby(q.q) : '') + '</div>' +
+          '<button class="btn btn-primary ex-play" type="button" id="lplay"' + (done ? ' disabled' : '') + '>' + S.icon('<path d="M7 5v14l12-7z"/>') + '<span>' + (done ? 'Played' : 'Play') + '</span></button>';
+      }
+      if (q.html) return '<div class="qline">' + n + q.qhtml + '</div>';
+      // text grammar: the blank being answered is highlighted, and the passage scrolls to it (see draw)
+      var half = function (x) { return x.replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }); };
+      var passage = q.passage ? '<div class="ex-passage' + (q.info ? ' info' : '') + '">' + underline(q.passage).replace(/（([０-９0-9]+)）/g, function (m, d) {
+        return '<b class="' + (q.kind === 'text_grammar' && half(d) === q.label ? 'blank-cur' : '') + '">' + m + '</b>';
+      }) + '</div>' : '';
+      if (q.kind === 'usage') return '<div class="qline">' + n + '<span class="headword">' + S.ruby(q.word || q.q) + '</span></div>';
+      if (q.kind === 'text_grammar') return passage + '<div class="qline">' + n + '</div>';
+      return passage + '<div class="qline">' + n + sentence(q.q || '') + '</div>';
+    }
+    function playOnce(q, b) {
+      var x = q.item, id = itemKey(x), parts = [];
+      if (played[id]) return; played[id] = 1;
+      if (x.intro) parts.push({ t: S.plain(x.intro), sp: 'N' });
+      x.lines.forEach(function (ln) { parts.push({ t: S.plain(ln.ja), sp: ln.sp }); });
+      if (x.subq) x.subq.forEach(function (sq, j) { parts.push({ t: '質問' + (j + 1) + '、' + S.plain(sq.question), sp: 'N' }); });
+      else if (x.question) parts.push({ t: S.plain(x.question), sp: 'N' });
+      if (!q.printed) x.options.forEach(function (o, k) { parts.push({ t: (k + 1) + '、' + S.plain(o), sp: 'N' }); });
+      b.disabled = true; b.lastChild.textContent = 'Playing…';
+      S.speak(parts, null, { rate: S.LISTEN_RATE[L], level: L }).then(function () {
+        var e = document.getElementById('lplay'); if (e) e.lastChild.textContent = 'Played';
+      });
+    }
+    function confirmEnd(btn) {
+      var miss = flat.filter(function (q) { return ans[key(q)] === undefined; }).length;
+      if (miss && !btn.dataset.sure) { btn.dataset.sure = 1; btn.classList.add('armed'); btn.textContent = miss + ' unanswered — tap again to finish'; return; }
+      finishSection(false);
+    }
+    function finishSection(timeUp) {
+      clearInterval(timer); S.stopSpeaking();
+      paper.sections[si].flat = flat; paper.sections[si].ans = flat.map(function (q, i) { return ans[si + ':' + i]; });
+      if (++si < paper.sections.length) {
+        main.innerHTML = '<div class="panel ex-card" style="margin-top:24px;text-align:center;justify-items:center"><div class="seal">' + (timeUp ? '時' : '済') + '</div><h2 style="margin:0">' + (timeUp ? 'Time’s up' : 'Section finished') + '</h2>' +
+          '<p class="muted" style="margin:0">Next: <span class="jp">' + paper.sections[si].jp + '</span> · ' + paper.sections[si].minutes + ' minutes.</p>' +
+          '<button class="btn btn-primary" type="button" id="cont">Start the next section ' + S.icon(S.ICONS.arrow) + '</button></div>';
+        document.getElementById('cont').onclick = startSection;
+      } else finish(paper);
+    }
+    startSection();
+  }
+
+  /* ---------- results ---------- */
+  function finish(paper) {
+    window.onbeforeunload = null;
+    var cats = { lk: { n: 0, ok: 0 }, read: { n: 0, ok: 0 }, listen: { n: 0, ok: 0 } };
+    paper.sections.forEach(function (s) { s.flat.forEach(function (q, i) { var c = cats[q.cat]; c.n++; if (s.ans[i] === q.answer) c.ok++; }); });
+    function pct(a) { return a.n ? a.ok / a.n : 0; }
+    var parts = SPLIT
+      ? [['言語知識・読解', Math.round(pct({ n: cats.lk.n + cats.read.n, ok: cats.lk.ok + cats.read.ok }) * 120), 120, 38], ['聴解', Math.round(pct(cats.listen) * 60), 60, 19]]
+      : [['言語知識', Math.round(pct(cats.lk) * 60), 60, 19], ['読解', Math.round(pct(cats.read) * 60), 60, 19], ['聴解', Math.round(pct(cats.listen) * 60), 60, 19]];
+    var total = parts.reduce(function (a, p) { return a + p[1]; }, 0), low = parts.filter(function (p) { return p[1] < p[3]; }), pass = total >= PASS && !low.length;
+    S.saveTest({ level: L, paper: P, total: total, pass: pass, parts: parts.map(function (p) { return p[0] + ' ' + p[1]; }).join(' · ') });
+    S.award(50, 'Mock test finished');
+    function strip(o, q) { return q.html ? o : S.ruby(o); }
+    function transcript(q) {
+      var x = q.item;
+      return '<details><summary class="muted" style="cursor:pointer;font-size:.88rem">Script</summary><div class="ls-script" style="padding:8px 0">' +
+        (x.intro ? '<div class="ls-line"><span class="ls-sp sp-N">—</span><div class="ja">' + S.ruby(x.intro) + '</div></div>' : '') +
+        x.lines.map(function (ln) { return '<div class="ls-line"><span class="ls-sp sp-' + ln.sp + '">' + { M: '男', F: '女', N: '—' }[ln.sp] + '</span><div><div class="ja">' + S.ruby(ln.ja) + '</div><div class="en">' + S.esc(ln.en || '') + '</div></div></div>'; }).join('') + '</div></details>' +
+        (q.q ? '<div class="qline">' + S.ruby(q.q) + '</div>' : '');
+    }
+    var review = paper.sections.map(function (s) {
+      return '<h3 class="section-title jp" style="margin-top:22px">' + s.jp + '</h3>' + s.flat.map(function (q, i) {
+        var a = s.ans[i], ok = a === q.answer, ul = function (t) { return S.ruby(t).replace(/\[\[([\s\S]*?)\]\]/g, '<u>$1</u>'); };
+        var head = q.part.official ? '' : q.kind === 'listen' ? transcript(q) : q.html ? '<div class="qline">' + q.qhtml + '</div>' :
+          (q.passage && (i === 0 || s.flat[i - 1].passage !== q.passage) ? '<div class="ex-passage' + (q.info ? ' info' : '') + '">' + ul(q.passage) + '</div>' : '') +
+          (q.kind === 'usage' ? '<div class="headword">' + S.ruby(q.word || q.q) + '</div>' : q.q ? '<div class="qline">' + ul(q.q) + '</div>' : '');
+        return '<div class="panel rv' + (ok ? '' : ' bad') + '"><div><span class="qno">' + S.esc(q.label) + '</span><span class="jp muted">問題' + q.part.mondai + '</span></div>' + head +
+          '<div class="ans">' + (a === undefined ? 'Not answered' : 'Your answer: <b>' + (a + 1) + (q.part.official ? '' : ' · ' + strip(q.options[a], q)) + '</b>') +
+          (ok ? ' <span style="color:var(--s-matcha-text)">✓</span>' : ' · Correct: <b style="color:var(--s-matcha-text)">' + (q.answer + 1) + (q.part.official ? '' : ' · ' + strip(q.options[q.answer], q)) + '</b>') + '</div>' +
+          (q.explain ? '<div class="why">' + (q.html ? q.explain : S.esc(q.explain)) + '</div>' : '') + '</div>';
+      }).join('');
+    }).join('');
+    main.innerHTML = '<section class="page-head"><div class="deck-ic d-test" style="width:64px;height:64px;border-radius:16px">' + S.icon(S.SECTIONS.test.icon) + '</div><div style="flex:1">' +
+      '<h1>' + total + ' / 180 · ' + S.esc(paper.title) + '</h1><p>' + L.toUpperCase() + ' pass mark: ' + PASS + ' / 180, and at least ' + (SPLIT ? '38 in 言語知識・読解 and 19 in 聴解' : '19 in every section') + '.</p></div></section>' +
+      '<div class="t-score">' + parts.map(function (p) { return '<div class="panel"><b' + (p[1] < p[3] ? ' style="color:var(--s-shu-text)"' : '') + '>' + p[1] + '<small style="font-size:.9rem;color:var(--s-ink-faint)"> / ' + p[2] + '</small></b><span class="jp">' + p[0] + '</span></div>'; }).join('') + '</div>' +
+      '<div class="panel note ' + (pass ? 'ok' : 'warn') + '" style="margin-top:14px;padding:16px 20px">' + (pass ? '<b>合格ライン — at pass level.</b> ' : '<b>Below the pass line' + (low.length ? ' — ' + low.map(function (p) { return p[0]; }).join(', ') + (low.length > 1 ? ' are' : ' is') + ' under the section minimum' : '') + '.</b> ') +
+        '<span class="muted">An estimate: each answer counts equally here, while the real JLPT weights questions and uses scaled scores.</span></div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0"><a class="btn btn-primary" href="test.html?l=' + L + '">All papers</a>' +
+        (paper.official ? '<a class="btn" target="_blank" rel="noopener" href="' + jlptUrl(paper.year, 'pdf/' + L.toUpperCase() + 'script.pdf') + '">Official listening script</a>' : '') + '</div>' +
+      '<h2 class="section-title">答え合わせ <small>Every question and the right answer</small></h2>' + review;
+    window.scrollTo(0, 0);
+  }
+})();
+</script>
+</body>
+</html>
